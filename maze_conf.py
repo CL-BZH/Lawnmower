@@ -1,4 +1,3 @@
-
 # Maze size
 MAZE_WIDTH = 500
 MAZE_HEIGHT = 500

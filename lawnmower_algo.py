@@ -1,7 +1,9 @@
 import time
 import random
 import math
- 
+from queue import PriorityQueue
+
+
 #
 def drunkard_walk(x, y, heading, valid_xy):
     offsets = [(0,1), (0,-1), (1,0), (1,1), (1,-1), (-1,0), (-1,1), (-1,-1),]
@@ -68,9 +70,7 @@ def random_walk_with_policy(x, y, heading, valid_xy):
         bias = [weights[key]+10 if (angles[key]==heading and reset==False) else
                 weights[key] for key in steps]
         reset = False
-        #print(f"probs: {bias}")
-        #print(f"steps: {steps}")
-        #print(f"directions: {directions}")
+
         dx, dy = random.choices(steps, bias)[0]
         new_x, new_y = x+dx, y+dy
         if (new_x, new_y) in valid_xy and (new_x, new_y) not in visited:
@@ -78,8 +78,6 @@ def random_walk_with_policy(x, y, heading, valid_xy):
             visited.append((x,y))
         elif (new_x, new_y) in visited:
             if len(steps) > 1:
-                #print(f"{(new_x, new_y)} is in visited places {visited}")
-                #print(f"Remove {(dx, dy)} from {steps}")
                 steps.remove((dx, dy))
                 continue
             else:
@@ -87,9 +85,7 @@ def random_walk_with_policy(x, y, heading, valid_xy):
                 x, y = new_x, new_y
                 steps = offsets[:]
                 reset = True
-                #print(f"Have to take step {steps}")
         else:
-            #print(f"{(new_x, new_y)} not in {valid_xy}")
             steps.remove((dx, dy))
             if len(steps) == 0:
                 steps = offsets[:]
@@ -103,7 +99,7 @@ def greedy_walk(x, y, heading, valid_xy):
     ''' 
     The difference with the random walk is that we try to enforce a policy.
     '''
-    visited = []
+    visited = [(x,y)]
     offsets = [(0,1), (0,-1), (1,0), (1,1), (1,-1), (-1,0), (-1,1), (-1,-1),]
     angles = {(0,1): 90, (0,-1): 270, (1,0): 0, (1,1): 45,
               (1,-1): 315, (-1,0): 180, (-1,1): 135, (-1,-1): 225}
@@ -129,54 +125,68 @@ def greedy_walk(x, y, heading, valid_xy):
             mov_x = x
             mov_y = y
             view_sum = 0
-            distance = 0
+            view_visited = 0
+            distance = math.inf
             while mov_x > 0 and mov_x <= max_x and mov_y < 0 and mov_y >= min_y:
                 mov_x = mov_x + dx
                 mov_y = mov_y + dy
-                if (mov_x, mov_y) not in valid_xy:
+                if ((mov_x, mov_y) not in valid_xy) or \
+                   ((offset == (1,1)) and (((x+1, y) not in valid_xy) or ((x, y+1) not in valid_xy))) or \
+                   ((offset == (1,-1)) and (((x+1, y) not in valid_xy) or ((x, y-1) not in valid_xy))) or \
+                   ((offset == (-1,1)) and (((x-1, y) not in valid_xy) or ((x, y+1) not in valid_xy))) or \
+                   ((offset == (-1,-1)) and (((x-1, y) not in valid_xy) or ((x, y-1) not in valid_xy))):
+                    #print(f"offset: {offset}. (x,y)={(x, y)}, view_sum={view_sum}")
                     break
                 if (mov_x, mov_y) not in visited:
+                    if view_sum == 0 and distance == math.inf:
+                        distance = dx**2 + dy**2
                     view_sum = view_sum + 1
                 else:
-                    if view_sum == 0:
-                        distance = distance + 1
-            sum_queen_view[offset] = (view_sum, distance)
+                    view_visited += 1
+                    if distance == math.inf:
+                        distance = dx**2 + dy**2
+                    elif view_sum == 0:
+                        distance = distance + dx**2 + dy**2
+            if view_sum == 0:
+                distance = math.inf
+            div = view_sum + view_visited
+            if div != 0:
+                value = view_sum / div
+            else:
+                value = 0
+
+            sum_queen_view[offset] = (value, view_sum, distance)
+            
         best_mov = offsets[0]
-        value_max, distance_min = sum_queen_view.get(best_mov)
+        value_max, view_sum_max, distance_min = sum_queen_view.get(best_mov)
         sum_queen_view.pop(best_mov)
-        
-        if (distance_min != 0) or (value_max == 0):
-            for mov, mov_factors in sum_queen_view.items():
-                distance = mov_factors[1]
-                value = mov_factors[0]
-                # if value > value_max:
-                #     best_mov = mov
-                #     value_max = value
 
-                if distance == 0 and value != 0:
+        for mov, mov_factors in sum_queen_view.items():
+            distance = mov_factors[2]
+            view_sum = mov_factors[1]
+            value = mov_factors[0]
+            
+            if distance < distance_min:
+                best_mov = mov
+                value_max = value
+                view_sum_max = view_sum
+                distance_min = distance
+            elif distance != math.inf and distance == distance_min:
+                #if (value/distance > value_max/distance_min):
+                if (value > value_max):   
                     best_mov = mov
                     value_max = value
-                    break
-                if distance_min == 0:
-                    best_mov = mov
-                    value_max = value
-                    distance_min = distance
-                elif distance > 0 and (value/distance > value_max/distance_min):
-                    best_mov = mov
-                    value_max = value
-                    distance_min = distance
+                    view_sum_max = view_sum
 
-
-        if value_max != 0:
-            while value_max:
-                #print(f"best_mov: {best_mov}, value_max = {value_max}")
+        if view_sum_max != 0:
+            while view_sum_max:
                 x, y = x + best_mov[0], y + best_mov[1]
                 if (x, y) not in valid_xy:
-                    print("BUG!")
+                    print(f"BUG! {(x, y)} not in place to mow...")
                     exit(-1)
                 if (x, y) not in visited:
                     visited.append((x,y))
-                    value_max = value_max - 1
+                    view_sum_max -= 1
                 yield (x,y)    
         else:
             # Whatever the direction we do not have direct access
@@ -185,32 +195,51 @@ def greedy_walk(x, y, heading, valid_xy):
             # Let's use a A* algorithm to guide us.
 
             # Select an unvisited position
+            potential_target = PriorityQueue()
             for target in valid_xy:
                 if target not in visited:
+                    # Find the "closest" one (considering simply the euclidian distance)
+                    potential_target.put((((x-target[0])**2 + (y-target[1])**2), target))
+
+            # Let's move to a target point
+            while not potential_target.empty():
+                target = potential_target.get()[1]
+                path = a_star_algorithm((x,y), target, valid_xy, offsets)
+                if path is not None:
                     break
-            # Let's move to that target point
-            #print(f"from {(x, y)} to {target}")
-            path = a_star_algorithm((x,y), target, valid_xy, offsets)
-            for (x,y) in path[1:]:
-                if (x, y) not in visited:
-                    visited.append((x,y))
-                yield (x,y)
+
+            if path is not None:
+                for (x,y) in path[1:]:
+                    if (x, y) not in visited:
+                        visited.append((x,y))
+                    yield (x,y)
+            else:
+                #print(f"No shortest path")
+                yield (math.inf, 0)
 
             
 def a_star_algorithm(start, stop, valid_nodes, offsets):
 
-    h = {node:1 for node in valid_nodes}
-    #g = {node:0 for node in valid_nodes}
-    #f = {node:0 for node in valid_nodes}
+    h = {node:(start[0] - node[0])**2 + (start[1] - node[1])**2 for node in valid_nodes}
+
     neighbors = {}
     for node in valid_nodes:
-        node_potential_neighbors = [(node[0] + offset[0], node[1] + offset[1])
-                                    for offset in offsets]
-        #print(potential_neighbors)
-    
-        node_neighbors = [node_neighbor for node_neighbor in
-                          node_potential_neighbors if (node_neighbor
-                                                       in valid_nodes)]
+        node_neighbors = []
+        for offset in offsets:
+            neighbor_node = (node[0] + offset[0], node[1] + offset[1])
+            if (((offset == (1,1)) and
+                 (((node[0]+1, node[1]) not in valid_nodes) or ((node[0], node[1]+1) not in valid_nodes))) or \
+                ((offset == (1,-1)) and
+                 (((node[0]+1, node[1]) not in valid_nodes) or ((node[0], node[1]-1) not in valid_nodes))) or \
+                ((offset == (-1,1)) and
+                 (((node[0]-1, node[1]) not in valid_nodes) or ((node[0], node[1]+1) not in valid_nodes))) or \
+                ((offset == (-1,-1)) and
+                 (((node[0]-1, node[1]) not in valid_nodes) or ((node[0], node[1]-1) not in valid_nodes)))):
+                # Make sure we do not hit a corner
+                    continue
+            elif (neighbor_node in valid_nodes):
+                node_neighbors.append(neighbor_node)
+
         neighbors[node] = node_neighbors
     
     # List of visited nodes with unvisited neighbor(s)
@@ -236,7 +265,7 @@ def a_star_algorithm(start, stop, valid_nodes, offsets):
                 n = v;
  
             if n == None:
-                print('Path does not exist!')
+                #print('Path does not exist!')
                 return None
  
         # if the current node is the stop
@@ -258,7 +287,7 @@ def a_star_algorithm(start, stop, valid_nodes, offsets):
         # for all the neighbors of the current node do
         for m in neighbors[n]:
             weight = 1
-            # if the current node is not presentin both open_lst and closed_lst
+            # if the current node is not present in both open_lst and closed_lst
             # add it to open_lst and note n as it's par
             if m not in open_lst and m not in closed_lst:
                 open_lst.add(m)
@@ -282,5 +311,6 @@ def a_star_algorithm(start, stop, valid_nodes, offsets):
         open_lst.remove(n)
         closed_lst.add(n)
  
-    print('Path does not exist!')
+    #print('Path does not exist!')
     return None
+

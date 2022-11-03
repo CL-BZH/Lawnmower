@@ -5,6 +5,7 @@ from maze_conf import *
 import time
 import numpy as np
 import matplotlib.pyplot as plt
+import math
 
 
 #turtle.mode('logo')
@@ -80,6 +81,7 @@ class Maze:
         self.mowed = []
         self.distance = -1
         self.efficiency =[]
+        self.direction_changes = 0
 
         
     def setValues(self):
@@ -471,32 +473,45 @@ class Maze:
             # Run the algo
             for x, y in searchFunction(self.current_pos[1],-self.current_pos[0],
                                        round(self.t.heading()), self.lawn):
+                if (x, y) == (math.inf, 0):
+                    # this is the code return by the algo to say there is not path to some unmowed lawn
+                    print(f"Cannot access unmowed lawn")
+                    efficiency = self.efficiency[-1]
+                    print(f"Global efficiency: {100*efficiency[0]/efficiency[1]}%")
+                    print(f"Number of direction change: {self.direction_changes}")
+                    break
+
                 col = x
                 row = -y
                 current_row, current_col = self.current_pos
                 delta_row = abs(current_row - row)
                 delta_col = abs(current_col - col)
                 if delta_row > 1 or delta_col > 1:
-                    print(f"BUG: delta_row = {delta_row}, delta_col = {delta_col}")
+                    print(f"BUG: current row: {current_row}, current_col: {current_col}).\n"
+                          f"next row: {row}, next col: {col}).\n" 
+                          f"delta_row = {delta_row}, delta_col = {delta_col}")
                     exit(-1)
                 if (row != current_row) or (col != current_col):
-                    self.setSpeed(10)
+                    #self.setSpeed(10)
+                    current_heading = self.t.heading()
                     self.updatePosition(row, col)
                     self.mow(*self.current_pos)
+                    if current_heading != self.t.heading():
+                        self.direction_changes += 1
                 else:
                     print("Check your algorithm: no movement")
                     exit(-1)
                 if len(self.mowed) == len(self.lawn):
                     self.t.color('lime')
                     pos = self.t.pos()
-                    self.t.setpos(0,0)
                     self.t.hideturtle()
+                    self.t.setpos(0,0)
                     self.t.write('Done!', font=("Arial", 20, "bold"))
                     self.t.setpos(*pos)
                     self.t.color(self.turtleColor)
                     self.t.showturtle()
                     print(f"Global efficiency: {100*len(self.lawn)/self.distance:.1f}%")
-                    
+                    print(f"Number of direction change: {self.direction_changes}")
                     break
                 #time.sleep(0.5);
             # Exit on click 
@@ -517,5 +532,3 @@ class Maze:
         
     def __getitem__(self,idx):
         return self.mazelist[idx]
-
-

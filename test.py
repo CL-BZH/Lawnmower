@@ -6,10 +6,10 @@ from lawnmower_algo import greedy_walk
 
 
 # Instantiate the maze reading the maze's describtion file
-maze = Maze('maze0.txt')
+#maze = Maze('maze0.txt')
 #maze = Maze('maze1.txt')
 #maze = Maze('maze2.txt')
-#maze = Maze('maze3.txt')
+maze = Maze('maze3.txt')
 
 # Draw the maze
 maze.drawMaze()

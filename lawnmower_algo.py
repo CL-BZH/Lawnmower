@@ -94,8 +94,38 @@ def random_walk_with_policy(x, y, heading, valid_xy):
         heading = angles[(dx, dy)]
         yield (x, y)
 
-        
-def greedy_walk(x, y, heading, valid_xy):
+def mc_greedy_learning(start_x, start_y, heading, valid_xy):
+    print(f"Number of cell to mow: {len(valid_xy)}")
+    epochs = 5*len(valid_xy)
+    paths = PriorityQueue()
+    min_path_len = math.inf
+    while epochs:
+        print(f"epochs = {epochs}")
+        visited = [(start_x, start_y)]
+        path = []
+        for (x, y) in greedy_walk(start_x, start_y, heading, valid_xy, learn=True):
+            if (x, y) not in visited:
+                visited.append((x,y))
+            path.append((x,y))
+            if len(visited) == len(valid_xy):
+                #print(f"Full path: {path}")
+                break
+        if any(path in item for item in paths.queue):
+            print(f"Path {path} already in")
+        else:
+            path_len = len(path)
+            if path_len < min_path_len:
+                min_path_len = path_len
+            paths.put((path_len, path))
+        epochs -= 1
+
+    print(f"Minimum Path length: {min_path_len }")
+    path = paths.get()[1]
+    print(f"Selected Path length: {len(path)}")
+    for node in path:
+        yield node
+    
+def greedy_walk(x, y, heading, valid_xy, learn=False):
     ''' 
     The difference with the random walk is that we try to enforce a policy.
     '''
@@ -117,6 +147,7 @@ def greedy_walk(x, y, heading, valid_xy):
             max_x = px
         if py < min_y:
             min_y = py
+            
     while True:
         sum_queen_view = {}
         for offset in offsets:
@@ -127,9 +158,11 @@ def greedy_walk(x, y, heading, valid_xy):
             view_sum = 0
             view_visited = 0
             distance = math.inf
+            sum_dx = dx
+            sum_dy = dy
             while mov_x > 0 and mov_x <= max_x and mov_y < 0 and mov_y >= min_y:
-                mov_x = mov_x + dx
-                mov_y = mov_y + dy
+                mov_x = x + sum_dx
+                mov_y = y + sum_dy
                 if ((mov_x, mov_y) not in valid_xy) or \
                    ((offset == (1,1)) and (((x+1, y) not in valid_xy) or ((x, y+1) not in valid_xy))) or \
                    ((offset == (1,-1)) and (((x+1, y) not in valid_xy) or ((x, y-1) not in valid_xy))) or \
@@ -138,15 +171,26 @@ def greedy_walk(x, y, heading, valid_xy):
                     #print(f"offset: {offset}. (x,y)={(x, y)}, view_sum={view_sum}")
                     break
                 if (mov_x, mov_y) not in visited:
-                    if view_sum == 0 and distance == math.inf:
-                        distance = dx**2 + dy**2
+                    if view_sum == 0:
+                        # First unvisited cell for the current direction
+                        if (sum_dx != dx or sum_dy != dy) and view_visited == 0:
+                            print(f"Bug 1: \n\tsum_dx = {sum_dx}\tsum_dy = {sum_dy}"
+                                  f"\n\tdx = {dx}\tdy = {dy}")
+                        distance = sum_dx**2 + sum_dy**2
                     view_sum = view_sum + 1
                 else:
                     view_visited += 1
                     if distance == math.inf:
-                        distance = dx**2 + dy**2
+                        # The first cell in the current direction has already been visited
+                        if sum_dx != dx or sum_dy != dy:
+                            print(f"Bug 2: \n\tsum_dx = {sum_dx}\tsum_dy = {sum_dy}"
+                                  f"\n\tdx = {dx}\tdy = {dy}")
+                        distance = sum_dx**2 + sum_dy**2
                     elif view_sum == 0:
                         distance = distance + dx**2 + dy**2
+                sum_dx += dx
+                sum_dy += dy
+                
             if view_sum == 0:
                 distance = math.inf
             div = view_sum + view_visited
@@ -156,44 +200,86 @@ def greedy_walk(x, y, heading, valid_xy):
                 value = 0
 
             sum_queen_view[offset] = (value, view_sum, distance)
-            
-        best_mov = offsets[0]
-        value_max, view_sum_max, distance_min = sum_queen_view.get(best_mov)
-        sum_queen_view.pop(best_mov)
 
-        for mov, mov_factors in sum_queen_view.items():
-            distance = mov_factors[2]
-            view_sum = mov_factors[1]
-            value = mov_factors[0]
+        if learn == True:
+            # Randomly select a valid direction
+            # d = math.inf
+            # offset_candidates = offsets[:]
+            # while d == math.inf and offset_candidates != []:
+            #     best_mov = random.sample(offset_candidates, 1)[0]
+            #     #print(f"Random selection for best mov: {best_mov}")
+            #     _, view_sum_max, d = sum_queen_view.get(best_mov)
+            #     offset_candidates.remove(best_mov)
             
-            if distance < distance_min:
-                best_mov = mov
-                value_max = value
-                view_sum_max = view_sum
-                distance_min = distance
-            elif distance != math.inf and distance == distance_min:
-                #if (value/distance > value_max/distance_min):
-                if (value > value_max):   
+            offset_candidates = []
+            candidates_weights = []
+            for mov, (value, view_sum, distance) in sum_queen_view.items():
+                offset_candidates.append(mov)
+                candidates_weights.append(value)
+
+            best_mov = random.choices(population=offset_candidates,
+                                      weights=candidates_weights,
+                                      k=1)[0]
+            _, view_sum_max, d = sum_queen_view.get(best_mov)
+            
+        else:
+            best_mov = offsets[0]
+            value_max, view_sum_max, distance_min = sum_queen_view.get(best_mov)
+            sum_queen_view.pop(best_mov)
+
+            #print(f"{(x,y)} -> candidate mov: {best_mov}, distance_min = {distance_min}")
+        
+            for mov, mov_factors in sum_queen_view.items():
+                distance = mov_factors[2]
+                view_sum = mov_factors[1]
+                value = mov_factors[0]
+                
+                # if distance == 1 and view_sum == 1:
+                #     #Stand alone cell. Select it in order to not leave it behind
+                #     best_mov = mov
+                #     view_sum_max = view_sum
+                #     print(f"Stand alone cell {(x + best_mov[0], y + best_mov[1])} selected")
+                #     break
+                
+                if distance < distance_min:
                     best_mov = mov
                     value_max = value
                     view_sum_max = view_sum
+                    distance_min = distance
+                elif distance != math.inf and distance >= distance_min:
+                    # print(f"\t{mov} distance {distance} >= {distance_min} distance_min")
+                    # print(f"\t{mov} value {value} vs {value_max}")
+                    ratio = value/distance
+                    min_distance_ratio = value_max/distance_min
+                    factor = 3
+                    if distance == distance_min:
+                        factor = 1
+                    if (ratio > factor * min_distance_ratio):
+                        print(f"ratio {ratio} > {3*min_distance_ratio} 3*min_distance_ratio")
+                        best_mov = mov
+                        value_max = value
+                        view_sum_max = view_sum
+                        distance_min = distance
 
+                #print(f"{(x,y)} -> best mov: {best_mov}, distance_min = {distance_min}")
+        
         if view_sum_max != 0:
             while view_sum_max:
                 x, y = x + best_mov[0], y + best_mov[1]
                 if (x, y) not in valid_xy:
-                    print(f"BUG! {(x, y)} not in place to mow...")
-                    exit(-1)
+                       print(f"BUG! {(x, y)} not in place to mow...")
+                       exit(-1)
                 if (x, y) not in visited:
-                    visited.append((x,y))
-                    view_sum_max -= 1
-                yield (x,y)    
+                       visited.append((x,y))
+                       view_sum_max -= 1
+                yield (x,y)
         else:
             # Whatever the direction we do not have direct access
             # to unvisited places. That is we can go to an unvisited
             # place following only one of the queen view.
             # Let's use a A* algorithm to guide us.
-
+            paths = []
+            
             # Select an unvisited position
             potential_target = PriorityQueue()
             for target in valid_xy:
@@ -202,14 +288,25 @@ def greedy_walk(x, y, heading, valid_xy):
                     potential_target.put((((x-target[0])**2 + (y-target[1])**2), target))
 
             # Let's move to a target point
+            astar_paths = []
             while not potential_target.empty():
                 target = potential_target.get()[1]
-                path = a_star_algorithm((x,y), target, valid_xy, offsets)
-                if path is not None:
+                astar_path = a_star_algorithm((x,y), target, valid_xy, offsets)
+                if astar_path is None:
+                    #print(f"astar_path is None for target {target}")
+                    continue
+                paths.append(astar_path)
+                if learn == False:
+                    break
+                elif len(paths) > 40:
+                    # We have to limit the search otherwise it takes too long
+                    print("Enforce limitation on call to A*")
                     break
 
-            if path is not None:
-                for (x,y) in path[1:]:
+            if paths:
+                astar_path = random.sample(paths, 1)[0]
+                #print(f"astar_path for target {target}: {astar_path}")
+                for x, y in astar_path[1:]:
                     if (x, y) not in visited:
                         visited.append((x,y))
                     yield (x,y)
@@ -219,7 +316,7 @@ def greedy_walk(x, y, heading, valid_xy):
 
             
 def a_star_algorithm(start, stop, valid_nodes, offsets):
-
+    #print(f"Run A*")
     h = {node:(start[0] - node[0])**2 + (start[1] - node[1])**2 for node in valid_nodes}
 
     neighbors = {}

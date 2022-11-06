@@ -157,12 +157,16 @@ class Maze:
         self.t.setheading(self.t.towards(x, y))
         self.t.goto(x, y)
     
-    def updatePosition(self, row, col):
+    def updatePosition(self, row, col, manual=False):
         if self.mazelist[row][col] == OBSTACLE:
             print(f"There is an obstacle in row {row}, column {col}")
-            exit(-1)
+            if manual == False:
+                exit(-1)
+            else:
+                return 0
         else:
             self.moveTurtle(col, row)
+            return 1
     
     def getDirections(self, row, col):
         """
@@ -212,8 +216,9 @@ class Maze:
             adjency[vertex] = (color, neighbors)
         return adjency
 
-    def drawGraph(self):
-        g = self.getGraph()
+    def drawGraph(self, g=None):
+        if not g:
+            g = self.getGraph()
         path = self.path.values()
         traces = []
         for vertex in g:
@@ -284,8 +289,7 @@ class Maze:
     def initQ(self):
         g = self.getGraph()
         print(f"rows: {self.rowsInMaze}, columns: {self.columnsInMaze}")
-        
-        
+    
     def mow(self, row, col):
         self.distance = self.distance + 1
         mowed = False
@@ -303,12 +307,12 @@ class Maze:
                                  y+self.yTranslate,
                                  colors[VISITED])
             self.moveTurtle(col, row)
-            self.wn.update()
-            self.wn.tracer(1)
             self.t.color(self.turtleColor)
             self.t.fillcolor(self.turtleFillColor)
             self.t.setheading(heading)
             self.t.showturtle()
+            self.wn.update()
+            self.wn.tracer(1)
             self.t.speed(self.speed)
         if self.efficiency == []:
             self.efficiency.append((1,1))
@@ -327,9 +331,56 @@ class Maze:
         plt.ylabel("Percentage of efficiency")
         plt.show()
         
+    def done(self):
+        self.t.color('lime')
+        pos = self.t.pos()
+        self.t.hideturtle()
+        self.t.setpos(0,0)
+        self.t.write('Done!', font=("Arial", 20, "bold"))
+        self.t.setpos(*pos)
+        self.t.color(self.turtleColor)
+        self.t.showturtle()
+        # Print the efficiency remove 1 from len(self.lawn) since the starting
+        # cell is always mowed
+        print(f"Global efficiency: {100*(len(self.lawn)-1)/self.distance:.1f}%")
+        print(f"Number of direction change: {self.direction_changes}")
+            
     def run(self, searchFunction=None):
+            
         if searchFunction==None:
+            self.mow(*self.current_pos)
+            heading = self.t.heading()
+            def forward():
+                nonlocal heading
+                self.wn.onkey(None, 'm')
+                current_row, current_col = self.current_pos
+                offsets = {0.0: (0, 1), 45.0: (-1,1), 90.0: (-1,0), 135.0: (-1,-1),
+                           180.0: (0,-1), 225.0: (1,-1), 270.0: (1,0), 315.0: (1,1)}
+                offset = offsets[self.t.heading()]
+                row = current_row + offset[0]
+                col = current_col + offset[1]
+                #print(f"row: {row}, col: {col}")
+                if self.updatePosition(row, col, manual=True):
+                    self.mow(row, col)
+                    if self.t.heading() != heading:
+                        heading = self.t.heading()
+                        self.direction_changes += 1
+                if len(self.mowed) == len(self.lawn):
+                    self.wn.onkey(None, 'm')
+                    self.wn.onkey(None, 'Left')
+                    self.wn.onkey(None, 'Right')
+                    self.done()
+                else:
+                    self.wn.onkeyrelease(lambda: forward(), 'm')
+                
+            print(f"Your time to play")
+            self.wn.onkey(lambda: self.t.setheading((self.t.heading()+45)%360), 'Left')
+            self.wn.onkey(lambda: self.t.setheading((self.t.heading()-45)%360), 'Right')
+            self.wn.onkeyrelease(lambda: forward(), 'm')
+                
+            self.wn.listen()
             self.wn.exitonclick()
+            #self.wn.mainloop()
         else:
             self.initQ()
             self.mow(*self.current_pos)
@@ -365,16 +416,7 @@ class Maze:
                     print("Check your algorithm: no movement")
                     exit(-1)
                 if len(self.mowed) == len(self.lawn):
-                    self.t.color('lime')
-                    pos = self.t.pos()
-                    self.t.hideturtle()
-                    self.t.setpos(0,0)
-                    self.t.write('Done!', font=("Arial", 20, "bold"))
-                    self.t.setpos(*pos)
-                    self.t.color(self.turtleColor)
-                    self.t.showturtle()
-                    print(f"Global efficiency: {100*len(self.lawn)/self.distance:.1f}%")
-                    print(f"Number of direction change: {self.direction_changes}")
+                    self.done()
                     break
                 #time.sleep(0.5);
             # Exit on click 

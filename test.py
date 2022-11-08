@@ -4,6 +4,7 @@ from lawnmower_algo import random_walk
 from lawnmower_algo import random_walk_with_policy
 from lawnmower_algo import greedy_walk
 from lawnmower_algo import mc_greedy_learning
+from lawnmower_algo import monte_carlo_search_tree
 
 
 # Instantiate the maze reading the maze's describtion file
@@ -33,7 +34,8 @@ maze.setSpeed(10)
 #maze.run(drunkard_walk)
 #maze.run(random_walk_with_policy)
 #maze.run(greedy_walk)
-maze.run(mc_greedy_learning)
+#maze.run(mc_greedy_learning)
+maze.run(monte_carlo_search_tree)
 # You enter the move
 #maze.run()
 

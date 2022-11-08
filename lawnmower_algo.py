@@ -314,10 +314,8 @@ def greedy_walk(x, y, heading, valid_xy, learn=False):
                 #print(f"No shortest path")
                 yield (math.inf, 0)
 
-            
-def a_star_algorithm(start, stop, valid_nodes, offsets):
-    #print(f"Run A*")
-    h = {node:(start[0] - node[0])**2 + (start[1] - node[1])**2 for node in valid_nodes}
+
+def get_nodes_neighbors(valid_nodes, offsets):
 
     neighbors = {}
     for node in valid_nodes:
@@ -338,6 +336,14 @@ def a_star_algorithm(start, stop, valid_nodes, offsets):
                 node_neighbors.append(neighbor_node)
 
         neighbors[node] = node_neighbors
+
+    return neighbors
+
+def a_star_algorithm(start, stop, valid_nodes, offsets):
+    #print(f"Run A*")
+    h = {node:(start[0] - node[0])**2 + (start[1] - node[1])**2 for node in valid_nodes}
+
+    neighbors = get_nodes_neighbors(valid_nodes, offsets)
     
     # List of visited nodes with unvisited neighbor(s)
     open_lst = set([start])
@@ -411,3 +417,53 @@ def a_star_algorithm(start, stop, valid_nodes, offsets):
     #print('Path does not exist!')
     return None
 
+
+def monte_carlo_search_tree(x, y, heading, valid_xy):
+
+    start = (x, y)
+    
+    offsets = [(0,1), (0,-1), (1,0), (1,1), (1,-1), (-1,0), (-1,1), (-1,-1),]
+
+    neighbors = get_nodes_neighbors(valid_xy, offsets)
+    
+    mcst = MCST(start, valid_xy, neighbors) 
+
+    for node in mcst.path():
+        yield node
+
+
+class MCST:
+
+    def __init__(self, start, cells, neighbors):
+        self.start = start
+        self.cells = cells
+        self.neighbors = neighbors
+        
+        # Each state is represented by a path (a list of visited cell
+        # from start to current node). Thus, state n is given by:
+        # [current_cell, state n-1].
+        # S0 = [start, None], S1 = [start_neighbor_i, S0], ...
+        # All states are stored in a list
+        states = [[start, None]]
+
+        # A tree node (vertex) represent a state with a value (given by the UCB).
+        # To compute the UCB we also need to store the number of time the node was
+        # visited.
+        
+
+    def path(self):
+        return  mc_greedy_learning(self.start[0], self.start[1], 0, self.nodes) 
+
+    def garbage(self):
+        # Keep track of visited nodes in a list (i.e. add the node in the list the
+        # first time it is visited)
+        visited_ndes = [current_node]
+        while len(visited_nodes) != len(valid_nodes):
+            # Select a neighbor to move to
+            current_node_neighbors = neighbors[current_node]
+        
+        
+    
+    
+    
+    

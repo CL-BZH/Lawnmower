@@ -361,7 +361,9 @@ def a_star_algorithm(start, stop, valid_nodes, offsets):
  
     while len(open_lst) > 0:
         n = None
- 
+
+        #print(f"Open list: {open_lst}")
+        
         # it will find a node with the lowest value of f() -
         for v in open_lst:
             if n == None or poo[v] + h[v] < poo[n] + h[n]:
@@ -414,7 +416,7 @@ def a_star_algorithm(start, stop, valid_nodes, offsets):
         open_lst.remove(n)
         closed_lst.add(n)
  
-    #print('Path does not exist!')
+    print('***Path does not exist!')
     return None
 
 
@@ -424,28 +426,46 @@ def monte_carlo_search_tree(x, y, heading, valid_xy):
     
     offsets = [(0,1), (0,-1), (1,0), (1,1), (1,-1), (-1,0), (-1,1), (-1,-1),]
 
-    neighbors = get_nodes_neighbors(valid_xy, offsets)
+    #neighbors = get_nodes_neighbors(valid_xy, offsets)
     
-    mcst = MCST(start, valid_xy, neighbors) 
+    mcst = MCST(start, valid_xy, offsets) 
 
-    for node in mcst.path():
-        yield node
+    for cell in mcst.rollout(start):
+        yield cell
+
+    #for cell in mcst.path():
+    #    yield cell
+
+        
+class MCST_node:
+    
+    def __init__(self, state):
+        self.state = state
+        self.number_of_visits = 0
+        self.t = 0
+        self.ucb = 0
 
 
 class MCST:
 
-    def __init__(self, start, cells, neighbors):
+    def __init__(self, start, cells, offsets):
         self.start = start
         self.cells = cells
-        self.neighbors = neighbors
+        self.offsets = offsets
+        self.visited_cells = [start]
+        self.neighbors = get_nodes_neighbors(cells, self.offsets)
+        self.number_of_moves = 0
+        self.last_neighbor_selection_proba = 0.6
         
         # Each state is represented by a path (a list of visited cell
         # from start to current node). Thus, state n is given by:
         # [current_cell, state n-1].
         # S0 = [start, None], S1 = [start_neighbor_i, S0], ...
         # All states are stored in a list
-        states = [[start, None]]
-
+        self.S0 = [start, None]
+        self.states = [self.S0]
+        self.root = MCST_node(self.S0)
+        
         # A tree node (vertex) represent a state with a value (given by the UCB).
         # To compute the UCB we also need to store the number of time the node was
         # visited.
@@ -454,16 +474,182 @@ class MCST:
     def path(self):
         return  mc_greedy_learning(self.start[0], self.start[1], 0, self.nodes) 
 
-    def garbage(self):
-        # Keep track of visited nodes in a list (i.e. add the node in the list the
-        # first time it is visited)
-        visited_ndes = [current_node]
-        while len(visited_nodes) != len(valid_nodes):
-            # Select a neighbor to move to
-            current_node_neighbors = neighbors[current_node]
+
+    def actions(self, cell):
+        ''' Return all possible actions from a given state (i.e. all neighbor cells of the current cell)'''
+        return self.neighbors[cell]
+    
+    def expand(self, cell):
+        for cell in self.actions(cell):
+            yield cell
+
+    def rollout(self, cell):
+        while len(self.visited_cells) != len(self.cells):
+            # Select a neighbor cell
+            for cell in self.rollout_policy(cell):
+                if cell not in self.visited_cells:
+                    self.visited_cells.append(cell)
+                self.number_of_moves += 1
+                self.states.append([cell, self.states[-1]])
+                if len(self.visited_cells) == len(self.cells):
+                    self.backpropagate(self.states[-1])
+                yield cell
         
+            
+    def rollout_policy(self, cell):
+        # Randomly select a neighbor cell
+        #return random.choices(self.neighbors[cell], k=1)[0]
+        #print(f"{cell}: {self.neighbors[cell]}")
+        candidates = []
+        for neighbor in self.neighbors[cell]:
+            #print(f"neighbor: {neighbor}")
+            if neighbor not in self.visited_cells:
+                # If all neighbor of the neighbor were visited then select this neighbor
+                # in order to not leave an cell behind.
+                neighbor_neighbors = []
+                for neighbor_neighbor in self.neighbors[neighbor]:
+                    if neighbor_neighbor not in self.visited_cells:
+                        neighbor_neighbors.append(neighbor_neighbor)
+                if neighbor_neighbors == [] and random.random() < self.last_neighbor_selection_proba:
+                        # Don't leave the last neighbor behind. 
+                        return [neighbor]
+                #else:
+                candidates.append(neighbor)
+        if candidates != []:
+            return random.choices(candidates, k=1)
+        # No neighbor that has not yet be visited.
+        # Use A* algorithm to go to a not yet visited neighbor
+        targets = []
+        for target in self.cells:
+            if target not in self.visited_cells:
+                targets.append(target)
+        if target != []:
+            target = random.choices(targets, k=1)[0]
+        #print(f"Find path from {cell} to {target}")
+        path = a_star_algorithm(cell, target, self.cells, self.offsets)
+        #print(f"A* path {path}")
+        return path[1:]
         
+    def backpropagate(self, final_state):
+        for i, state in enumerate(self.states[::-1]):
+            #print(f"State {len(self.states) - i}: {state}")
+            pass
+   
+            
+
+     
+def qlearning(start_x, start_y, heading, valid_xy):
+    # Hyperparameters
+    alpha = 0.9
+    gamma = 0.9
+    epsilon = 0.4
     
-    
-    
+    offsets = [(0,1), (0,-1), (1,0), (1,1), (1,-1), (-1,0), (-1,1), (-1,-1),]
+    Q = {}
+
+    end_state = (7, -5)
+    # init Q
+    for state in valid_xy:
+        actions = []
+        for offset in offsets:
+            if (((offset == (1,1)) and
+                 (((state[0]+1, state[1]) not in valid_xy) or ((state[0], state[1]+1) not in valid_xy))) or \
+                ((offset == (1,-1)) and
+                 (((state[0]+1, state[1]) not in valid_xy) or ((state[0], state[1]-1) not in valid_xy))) or \
+                ((offset == (-1,1)) and
+                 (((state[0]-1, state[1]) not in valid_xy) or ((state[0], state[1]+1) not in valid_xy))) or \
+                ((offset == (-1,-1)) and
+                 (((state[0]-1, state[1]) not in valid_xy) or ((state[0], state[1]-1) not in valid_xy)))):
+                # Make sure we do not hit a corner
+                continue
+            if (state[0]+offset[0], state[1]+offset[1]) in valid_xy:
+                actions.append(offset)
+        if actions != []:
+            Q[state] = {action:0 for action in actions}
+        else:
+            Q[state] = {}
+
+    # train
+    epochs = 100000
+    while epochs:
+        state = (start_x, start_y)
+        visited = []
+        visited.append(state)
+        start = True
+        done = False
+        efficiency = []
+        epoch_efficiency = 0
+        useful_steps = 0
+        steps = 0
+        while not done:
+            d = Q[state]
+            if start == True or random.uniform(0, 1) < epsilon:
+                # Explore
+                action = random.sample(d.keys(), 1)[0]
+                #print(f"action: {action}")
+            else:
+                # Exploit
+                action = max(d, key=d.get)
+                #print(f"action: {action}")
+            
+            next_state = (state[0] + action[0], state[1] + action[1])
+            reward = -10
+            steps += 1
+            if next_state not in visited:
+                if len(visited) == len(valid_xy) - 1 or next_state == end_state:
+                    reward = 15
+                else:
+                    reward = 10*len(visited)
+
+            old_value = d[action]
+            next_d = Q[next_state]
+            next_max = next_d[max(next_d, key=next_d.get)]
+            #print(f"next_max = {next_max}")
+        
+            new_value = (1 - alpha) * old_value + alpha * (reward + gamma * next_max)
+            Q[state][action] = new_value
+            
+            if state not in visited:
+                useful_steps += 1
+                visited.append(state)
+            if len(visited) == len(valid_xy) or state == end_state:
+                done = True
+
+            # move to next state
+            state = next_state
+
+        epoch_efficiency = useful_steps / steps
+        efficiency.append(epoch_efficiency)
+        #if epochs%10 == 0:
+        #    print(f"epochs {epochs} efficiency: {epoch_efficiency}")
+        epochs -= 1
+
+    print(f"Training is finished. Final efficiency: {efficiency[-1]}")
+
+    visited = []
+    state = (start_x, start_y)
+    previous_state = None
+    visited.append(state)
+    while len(visited) != len(valid_xy):
+        d = Q[state]
+        # print(f"Current state: {state}, coming from: {previous_state}")
+        # if previous_state:
+        #     back_action = (previous_state[0] - state[0], previous_state[1] - state[1])
+        #     if back_action in d:
+        #         print(f"Remove {back_action}")
+        #         d.pop(back_action)
+        #         #print(f"d {d}")
+            
+        action = max(d, key=d.get)
+        print(f"Take action: {action}")
+        next_state = (state[0] + action[0], state[1] + action[1])
+        if next_state not in visited:
+                visited.append(next_state)
+        previous_state = state
+        state = next_state
+        
+        yield state
+    # Trick
+    #for (x,y) in greedy_walk(start_x, start_y, heading, valid_xy):
+        #yield (x,y)
     

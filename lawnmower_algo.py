@@ -429,16 +429,71 @@ def monte_carlo_search_tree(x, y, heading, valid_xy):
     #neighbors = get_nodes_neighbors(valid_xy, offsets)
     
     mcst = MCST(start, valid_xy, offsets) 
-
-    for cell in mcst.rollout(start):
+    
+    for cell in mcst.estimate_best_path():
         yield cell
 
     #for cell in mcst.path():
     #    yield cell
 
+    
+class MCST_state:
+    def __init__(self, cell, neighbor_cells, parent_state_id):
+        self.cell = cell
+        self.parent_state_id = parent_state_id
+        self.unvisited_neighbors = neighbor_cells
+        self.child =[]
+        self.score = 0
+        self.visits = 0
+
+    def add_child(self, child_id):
+        self.child.append(child_id)
+    
+    def get_child(self, child_id):
+        return self.child
+        
+    def __str__(self):
+        return f"Cell: {self.cell}, Parent state id: {self.parent_state_id}, Unvisited neighbor cells: {self.unvisited_neighbors}"
+        
+class MCST_states:
+    def __init__(self, neighbors):
+        self.neighbors = neighbors
+        self.state_i = 0
+        self.states = {}
+        
+    def add(self, cell, parent_state_id):
+        state_id = self.state_i
+        self.states[state_id] = MCST_state(cell, self.neighbors[cell], parent_state_id)
+        self.state_i += 1
+        # Return the id of the added state
+        return state_id
+    
+    def get(self, state_id):
+        return self.states[state_id]
+
+    def get_cell(self, state_id):
+        return self.states[state_id].cell
+    
+    def get_parent_id(self, state_id):
+        return self.get(state_id).parent_state_id 
+    
+    def get_path(self, state_id):
+        path = []
+        print(f"Get the path from start to state {state_id}")
+        state = self.states[state_id]
+        if state == None:
+            print(f"ERROR: state {state_id} is None!!!")
+            return None
+        print(f"End state: {state}")
+        while state != None:
+            path.append(state.cell)
+            if state.parent_state_id == None:
+                break
+            state = self.states[state.parent_state_id]
+            
+        return path
         
 class MCST_node:
-    
     def __init__(self, state):
         self.state = state
         self.number_of_visits = 0
@@ -456,35 +511,57 @@ class MCST:
         self.neighbors = get_nodes_neighbors(cells, self.offsets)
         self.number_of_moves = 0
         self.last_neighbor_selection_proba = 0.6
-        self.simulations = 100
+        self.simulations = 1
         
         # Each state is represented by a path (a list of visited cell
         # from start to current node). Thus, state n is given by:
         # [current_cell, state n-1].
         # S0 = [start, None], S1 = [start_neighbor_i, S0], ...
         # All states are stored in a list
-        self.S0 = [start, None]
-        self.states = [self.S0]
-        self.root = MCST_node(self.S0)
-        
-        # A tree node (vertex) represent a state with a value (given by the UCB).
-        # To compute the UCB we also need to store the number of time the node was
-        # visited.
+        self.states = MCST_states(self.neighbors)
+        self.start_state_id = self.states.add(start, None)
+        self.current_state_id = self.start_state_id
         
 
     def path(self):
         return  mc_greedy_learning(self.start[0], self.start[1], 0, self.nodes) 
 
+    def expension(self, state_id):
+        state = self.states.get(state_id)
+        if len(state.unvisited_neighbors) != 0:
+            target_cell = random.choices(state.unvisited_neighbors, k=1)[0]
+            print(f"Remove {target_cell} from {state.unvisited_neighbors}")
+            state.unvisited_neighbors.remove(target_cell)
+            child_state_id = self.states.add(target_cell, state_id)
+            return child_state_id
+        # All neighbors were visited at least once. Select the one with the best UCB.
+        best_child = math.inf
+        ucb_max = 0
+        N = state.n
+        for child_id in state.get_child():
+            child_state = self.states[child_id]
+            v = child_state.score
+            n = child_state.visits
+            ucb = v + 2*math.sqrt(math.ln(N)/n)
+            if ucb > ucb_max:
+                best_child = child_id
+                ucb_max = ucb
+        if best_child == math.inf:
+            print("BUG: best child id is inf")
+            exit(1)
+        return best_child_id   
+        
     def estimate_best_path(self):
-	for i in range(self.simulations):
+        for _ in range(self.simulations):
+            state_id = self.start_state_id
             # Get the cell where to move  (expension)
-            v = self._tree_policy()
+            next_state_id = self.expension(state_id)
+            yield self.states.get_cell(next_state_id)
             # Simulation
-            reward = v.rollout()
+            for cell in self.rollout(next_state_id):
+                yield cell
             # Back-propagate
-            v.backpropagate(reward)
-	
-    return self.best_child(c_param=0.)
+            #backpropagate(reward)
 
     def actions(self, cell):
         ''' Return all possible actions from a given state (i.e. all neighbor cells of the current cell)'''
@@ -494,16 +571,20 @@ class MCST:
         for cell in self.actions(cell):
             yield cell
 
-    def rollout(self, cell):
+    def rollout(self, state_id):
+        current_state_id = state_id
+        state = self.states.get(state_id)
+        cell = state.cell
+        print(f"Start rollout from cell {cell}")
         while len(self.visited_cells) != len(self.cells):
             # Select a neighbor cell
             for cell in self.rollout_policy(cell):
                 if cell not in self.visited_cells:
                     self.visited_cells.append(cell)
                 self.number_of_moves += 1
-                self.states.append([cell, self.states[-1]])
+                #current_state_id = self.states.add(cell, current_state_id)
                 if len(self.visited_cells) == len(self.cells):
-                    self.backpropagate(self.states[-1])
+                    self.backpropagate(current_state_id)
                 yield cell
         
             
@@ -541,10 +622,10 @@ class MCST:
         #print(f"A* path {path}")
         return path[1:]
         
-    def backpropagate(self, final_state):
-        for i, state in enumerate(self.states[::-1]):
-            print(f"State {len(self.states) - i}: {state}")
-            pass
+    def backpropagate(self, final_state_id):
+        pass
+        #path = self.states.get_path(final_state_id)
+        #print(f"Path: {path}")
    
             
 

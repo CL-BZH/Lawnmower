@@ -456,6 +456,7 @@ class MCST:
         self.neighbors = get_nodes_neighbors(cells, self.offsets)
         self.number_of_moves = 0
         self.last_neighbor_selection_proba = 0.6
+        self.simulations = 100
         
         # Each state is represented by a path (a list of visited cell
         # from start to current node). Thus, state n is given by:
@@ -474,6 +475,16 @@ class MCST:
     def path(self):
         return  mc_greedy_learning(self.start[0], self.start[1], 0, self.nodes) 
 
+    def estimate_best_path(self):
+	for i in range(self.simulations):
+            # Get the cell where to move  (expension)
+            v = self._tree_policy()
+            # Simulation
+            reward = v.rollout()
+            # Back-propagate
+            v.backpropagate(reward)
+	
+    return self.best_child(c_param=0.)
 
     def actions(self, cell):
         ''' Return all possible actions from a given state (i.e. all neighbor cells of the current cell)'''
@@ -532,7 +543,7 @@ class MCST:
         
     def backpropagate(self, final_state):
         for i, state in enumerate(self.states[::-1]):
-            #print(f"State {len(self.states) - i}: {state}")
+            print(f"State {len(self.states) - i}: {state}")
             pass
    
             

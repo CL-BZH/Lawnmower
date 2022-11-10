@@ -12,7 +12,8 @@ from lawnmower_algo import monte_carlo_search_tree
 #maze = Maze('maze1.txt')
 #maze = Maze('maze2.txt')
 #maze = Maze('maze3.txt')
-maze = Maze('maze4.txt')
+#maze = Maze('maze4.txt')
+maze = Maze('maze5.txt')
 
 # Draw the maze
 maze.drawMaze()
@@ -21,10 +22,11 @@ maze.drawMaze()
 # describing the maze
 #maze.setStart(row=4, col=10, heading=0)
 #maze.setStart(row=10, col=14, heading=0)
-maze.setStart(row=6, col=1, heading=0)
+#maze.setStart(row=6, col=1, heading=0)
 #maze.setStart(row=10, col=1, heading=45)
 #maze.setStart(row=1, col=19, heading=180)
 #maze.setStart(row=3, col=2, heading=0)
+maze.setStart(row=3, col=1, heading=0)
 
 
 # Set the turtle speed (between 1 and 10) (default to 3)

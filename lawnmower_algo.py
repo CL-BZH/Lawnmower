@@ -423,372 +423,47 @@ def a_star_algorithm(start, stop, valid_nodes, offsets):
     return None
 
 
-def monte_carlo_search_tree(x, y, heading, valid_xy):
 
-    start = (x, y)
-    
-    offsets = [(0,1), (0,-1), (1,0), (1,1), (1,-1), (-1,0), (-1,1), (-1,-1),]
-
-    #neighbors = get_nodes_neighbors(valid_xy, offsets)
-    
-    mcst = MCST(start, valid_xy, offsets) 
-    
-    for cell in mcst.estimate_best_path():
-        yield cell
-
-    #for cell in mcst.path():
-    #    yield cell
-
-    
-class MCST_state:
-    def __init__(self, cell, neighbor_cells, parent_state_id):
-        self.cell = cell
-        self.parent_state_id = parent_state_id
-        self.unvisited_neighbors = neighbor_cells[:]
-        self.children =[]
-        self.score = 0
-        self.visits = 0
-
-    def add_child(self, child_id):
-        print(f"Add child state with id {child_id}")
-        self.children.append(child_id)
-
-    def get_children_ids(self):
-        return self.children
-    
-    def get_child(self, child_id):
-        return self.children[child_id]
-        
-    def __str__(self):
-        return f"Cell: {self.cell}, Parent state id: {self.parent_state_id}, \
-        Unvisited neighbor cells: {self.unvisited_neighbors}, children: {self.children}"
-        
-class MCST_states:
-    def __init__(self, neighbors):
-        self.neighbors = neighbors
-        print(f"All MCST_states neighbors: {self.neighbors}")
-        self.state_i = 0
-        self.states = {}
-        
-    def add(self, cell, parent_state_id):
-        print(f"Add state {self.state_i} for cell {cell} with parent state id {parent_state_id}")
-        state_id = self.state_i
-        neighbors = self.neighbors[cell]
-        if neighbors == []:
-            print(f"BUG: neighbors == [] for cell {cell}")
-            print(f"All neighbors: {self.neighbors}")
-            exit(1)
-        self.states[state_id] = MCST_state(cell, neighbors, parent_state_id)
-        if parent_state_id != None:
-            self.states[parent_state_id].children.append(state_id)
-        elif self.state_i > 0:
-            print(f"Error parent_state_id == 0 and state_i = {self.state_i}")
-            exit(1)
-        self.state_i += 1
-        # Return the id of the added state
-        return state_id
-    
-    def get(self, state_id):
-        if state_id == None:
-            print("BUG ! state get called with state_id == None")
-            exit(1)
-        #print(f"Get state with id {state_id} for cell {self.states[state_id].cell}")
-        return self.states[state_id]
-
-    def get_cell(self, state_id):
-        return self.states[state_id].cell
-    
-    def get_parent_id(self, state_id):
-        return self.get(state_id).parent_state_id 
-    
-    def get_path(self, state_id):
-        path = []
-        print(f"Get the path from start to state {state_id}")
-        state = self.states[state_id]
-        if state == None:
-            print(f"ERROR: state {state_id} is None!!!")
-            return None
-        print(f"End state: {state}")
-        while state != None:
-            path.append(state.cell)
-            if state.parent_state_id == None:
-                break
-            state = self.states[state.parent_state_id]
-            
+def hamilton_cycle_util(path, graph, vertices):
+    # base case: if all vertices are included in the path
+    if len(path) == vertices:
         return path
-        
 
-class MCST:
+    #print(f"Path: {path}")
 
-    def __init__(self, start, cells, offsets):
-        self.start = start # Starting cell
-        self.cells = cells
-        self.offsets = offsets
-        self.visited_cells = [start]
-        self.neighbors = get_nodes_neighbors(cells, self.offsets)
-        print(f"All neighbors: {self.neighbors}")
-        self.number_of_moves = 0
-        self.last_neighbor_selection_proba = 0.6
-        self.simulations = 1000
-        self.path = []
-        
-        # Each state is represented by a path (a list of visited cell
-        # from start to current node). Thus, state n is given by:
-        # [current_cell, state n-1].
-        # S0 = [start, None], S1 = [start_neighbor_i, S0], ...
-        # All states are stored in a list
-        self.states = MCST_states(self.neighbors)
-        self.start_state_id = self.states.add(start, None)
-        self.current_state_id = self.start_state_id
-        
+    neighbors = graph[path[-1]][1:][0]
+    if neighbors == []:
+        print(f"BUG: neighbors list for {path[-1]} is empty")
 
-    def path(self):
-        return  mc_greedy_learning(self.start[0], self.start[1], 0, self.nodes) 
+    closest_neighbors = [neighbor for neighbor, weight in neighbors if weight == 1]
 
-    def expension(self, state_id):
-        print(f"Call expension({state_id})")
-        state = self.states.get(state_id)
-        print(f"Expension for state id {state_id}. state = {state}")
-        if len(state.unvisited_neighbors) != 0:
-            target_cell = random.choices(state.unvisited_neighbors, k=1)[0]
-            print(f"Remove {target_cell} from {state.unvisited_neighbors}")
-            state.unvisited_neighbors.remove(target_cell)
-            child_state_id = self.states.add(target_cell, state_id)
-            #print(f"Child with id {child_state_id} added to state {state_id}")
-            #state.visits += 1
-            return child_state_id
-        # All neighbors were visited at least once. Select the one with the best UCB.
-        best_child_id = math.inf
-        ucb_max = 0
-        N = state.visits
-        for child_id in state.get_children_ids():
-            child_state = self.states.get(child_id)
-            v = child_state.score
-            n = child_state.visits
-            ucb = v + 2*math.sqrt(math.log(N)/n)
-            print(f"child_id {child_id} (cell {child_state.cell}) - Computed UCB with N = {N}, n = {n} and v = {v}: {ucb}")
-            if ucb > ucb_max:
-                best_child_id = child_id
-                ucb_max = ucb
-        if best_child_id == math.inf:
-            print(f"!!! best child id is inf => No children for state with id {state_id}")
-            print(f"\tPath so far: {self.path}")
-            print(f"\tstate: {state}")
-            exit(1)
-            #return best_child_id
-        #return best_child_id
-        state = self.states.get(best_child_id)
-        #state.visits += 1
-        self.path.append(state.cell)
-        return self.expension(best_child_id)
-        
-    def estimate_best_path(self):
-        for i in range(self.simulations):
-            print(f"******* Simulation {i} starting at cell {self.start}")
-            self.visited_cells = [self.start]
-            self.path = [self.start]
-            state_id = self.start_state_id
-            # Get the cell where to move  (expension)
-            next_state_id = self.expension(state_id)
-            # Simulation
-            if next_state_id != math.inf:
-                print(f"Call rollout({next_state_id})")
-                v = self.rollout(next_state_id)
-                # Back-propagate
-                self.backpropagate(next_state_id, v)
-            else:
-                print(f"BUG: next_state_id == inf")
-                exit(1)
-                
-        print(f"Path {self.path}")
-        for cell in self.path[1:]:
-            yield cell
+    if closest_neighbors == []:
+        closest_neighbors = [neighbor for neighbor, weight in neighbors]
 
-    def actions(self, cell):
-        ''' Return all possible actions from a given state (i.e. all neighbor cells of the current cell)'''
-        return self.neighbors[cell]
+    # Shuffle of neighbors list
+    random.shuffle(closest_neighbors)
     
-    def expand(self, cell):
-        for cell in self.actions(cell):
-            yield cell
+    for neighbor in closest_neighbors:
+        if neighbor not in path:
+            path.append(neighbor)
+            if hamilton_cycle_util(path, graph, vertices) != []:
+                return path
 
-    def rollout(self, state_id):
-        print(f"Rollout for state {state_id}")
-        current_state_id = state_id
-        state = self.states.get(state_id)
-        cell = state.cell
-        self.path.append(cell)
-        print(f"Start rollout from cell {cell} with path = {self.path}")
-        nb_of_cells_to_visit = len(self.cells) - len(self.visited_cells)
-        number_of_moves = 1
-        while len(self.visited_cells) != len(self.cells):
-            # Select a neighbor cell
-            for cell in self.rollout_policy(cell):
-                self.path.append(cell)
-                if cell not in self.visited_cells:
-                    self.visited_cells.append(cell)
-                number_of_moves += 1
-        return nb_of_cells_to_visit/number_of_moves
-        
-            
-    def rollout_policy(self, cell):
-        # Randomly select a neighbor cell
-        #return random.choices(self.neighbors[cell], k=1)[0]
-        #print(f"{cell}: {self.neighbors[cell]}")
-        candidates = []
-        for neighbor in self.neighbors[cell]:
-            #print(f"neighbor: {neighbor}")
-            if neighbor not in self.visited_cells:
-                # If all neighbor of the neighbor were visited then select this neighbor
-                # in order to not leave an cell behind.
-                neighbor_neighbors = []
-                for neighbor_neighbor in self.neighbors[neighbor]:
-                    if neighbor_neighbor not in self.visited_cells:
-                        neighbor_neighbors.append(neighbor_neighbor)
-                if neighbor_neighbors == [] and random.random() < self.last_neighbor_selection_proba:
-                        # Don't leave the last neighbor behind. 
-                        return [neighbor]
-                #else:
-                candidates.append(neighbor)
-        if candidates != []:
-            return random.choices(candidates, k=1)
-        # No neighbor that has not yet be visited.
-        # Use A* algorithm to go to a not yet visited neighbor
-        targets = []
-        for target in self.cells:
-            if target not in self.visited_cells:
-                targets.append(target)
-        if target != []:
-            target = random.choices(targets, k=1)[0]
-        #print(f"Find path from {cell} to {target}")
-        path = a_star_algorithm(cell, target, self.cells, self.offsets)
-        #print(f"A* path {path}")
-        return path[1:]
-        
-    def backpropagate(self, state_id, v):
-        print(f"Back propagate from state with id {state_id}")
-        while state_id != None:
-            state = self.states.get(state_id)
-            state.visits += 1
-            state.score += v
-            state_id = state.parent_state_id
-   
-            
-
-     
-def qlearning(start_x, start_y, heading, valid_xy):
-    # Hyperparameters
-    alpha = 0.9
-    gamma = 0.9
-    epsilon = 0.4
+            path.remove(path[-1])
     
-    offsets = [(0,1), (0,-1), (1,0), (1,1), (1,-1), (-1,0), (-1,1), (-1,-1),]
-    Q = {}
+    return []
 
-    end_state = (7, -5)
-    # init Q
-    for state in valid_xy:
-        actions = []
-        for offset in offsets:
-            if (((offset == (1,1)) and
-                 (((state[0]+1, state[1]) not in valid_xy) or ((state[0], state[1]+1) not in valid_xy))) or \
-                ((offset == (1,-1)) and
-                 (((state[0]+1, state[1]) not in valid_xy) or ((state[0], state[1]-1) not in valid_xy))) or \
-                ((offset == (-1,1)) and
-                 (((state[0]-1, state[1]) not in valid_xy) or ((state[0], state[1]+1) not in valid_xy))) or \
-                ((offset == (-1,-1)) and
-                 (((state[0]-1, state[1]) not in valid_xy) or ((state[0], state[1]-1) not in valid_xy)))):
-                # Make sure we do not hit a corner
-                continue
-            if (state[0]+offset[0], state[1]+offset[1]) in valid_xy:
-                actions.append(offset)
-        if actions != []:
-            Q[state] = {action:0 for action in actions}
-        else:
-            Q[state] = {}
-
-    # train
-    epochs = 100000
-    while epochs:
-        state = (start_x, start_y)
-        visited = []
-        visited.append(state)
-        start = True
-        done = False
-        efficiency = []
-        epoch_efficiency = 0
-        useful_steps = 0
-        steps = 0
-        while not done:
-            d = Q[state]
-            if start == True or random.uniform(0, 1) < epsilon:
-                # Explore
-                action = random.sample(d.keys(), 1)[0]
-                #print(f"action: {action}")
-            else:
-                # Exploit
-                action = max(d, key=d.get)
-                #print(f"action: {action}")
-            
-            next_state = (state[0] + action[0], state[1] + action[1])
-            reward = -10
-            steps += 1
-            if next_state not in visited:
-                if len(visited) == len(valid_xy) - 1 or next_state == end_state:
-                    reward = 15
-                else:
-                    reward = 10*len(visited)
-
-            old_value = d[action]
-            next_d = Q[next_state]
-            next_max = next_d[max(next_d, key=next_d.get)]
-            #print(f"next_max = {next_max}")
-        
-            new_value = (1 - alpha) * old_value + alpha * (reward + gamma * next_max)
-            Q[state][action] = new_value
-            
-            if state not in visited:
-                useful_steps += 1
-                visited.append(state)
-            if len(visited) == len(valid_xy) or state == end_state:
-                done = True
-
-            # move to next state
-            state = next_state
-
-        epoch_efficiency = useful_steps / steps
-        efficiency.append(epoch_efficiency)
-        #if epochs%10 == 0:
-        #    print(f"epochs {epochs} efficiency: {epoch_efficiency}")
-        epochs -= 1
-
-    print(f"Training is finished. Final efficiency: {efficiency[-1]}")
-
-    visited = []
-    state = (start_x, start_y)
-    previous_state = None
-    visited.append(state)
-    while len(visited) != len(valid_xy):
-        d = Q[state]
-        # print(f"Current state: {state}, coming from: {previous_state}")
-        # if previous_state:
-        #     back_action = (previous_state[0] - state[0], previous_state[1] - state[1])
-        #     if back_action in d:
-        #         print(f"Remove {back_action}")
-        #         d.pop(back_action)
-        #         #print(f"d {d}")
-            
-        action = max(d, key=d.get)
-        print(f"Take action: {action}")
-        next_state = (state[0] + action[0], state[1] + action[1])
-        if next_state not in visited:
-                visited.append(next_state)
-        previous_state = state
-        state = next_state
-        
-        yield state
-    # Trick
-    #for (x,y) in greedy_walk(start_x, start_y, heading, valid_xy):
-        #yield (x,y)
     
+def hamilton_cycle(start_x, start_y, heading, valid_xy, graph):
 
+    path = [(-start_y, start_x)]
+ 
+    if hamilton_cycle_util(path, graph, len(valid_xy)) == False:
+        print ("Solution does not exist\n")
+        return []
+
+    #print(f"Path to return: {path[1::]}")
+    
+    for (x, y) in path[1::]:
+        print(f"yield {(-y, x)}")
+        yield (y, -x)

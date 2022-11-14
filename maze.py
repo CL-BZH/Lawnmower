@@ -199,21 +199,27 @@ class Maze:
             directions = self.getDirections(*vertex)
             neighbors = []
             for compass, neighbor in directions.items():
+                weight = 1
                 if neighbor in vertices:
                     if compass == 'NE':
+                        weight = 2
                         if directions['N'] not in vertices or directions['E'] not in vertices:
                             continue
                     if compass == 'NW':
+                        weight = 2
                         if directions['N'] not in vertices or directions['W'] not in vertices:
                             continue
                     if compass == 'SW':
+                        weight = 2
                         if directions['W'] not in vertices or directions['S'] not in vertices:
                             continue
                     if compass == 'SE':
+                        weight = 2
                         if directions['E'] not in vertices or directions['S'] not in vertices:
                             continue
-                    neighbors.append(neighbor)
+                    neighbors.append((neighbor, weight))
             adjency[vertex] = (color, neighbors)
+        print(adjency)
         return adjency
 
     def drawGraph(self, g=None):
@@ -227,7 +233,10 @@ class Maze:
             annotation = ''
             #v = go.Scatter(x = vx, y = vy, mode = 'markers', name = vertex)
             color = g[vertex][0]
-            edges = g[vertex][1:][0]
+            edges_and_weights = g[vertex][1:][0]
+            #print(f"edges_and_weights: {edges_and_weights}")
+            edges = [v for v, w in edges_and_weights]
+            #print(f"edges: {edges}")
             if len(edges) > 0:
                 for edge in edges:
                     X = [vx]
@@ -285,10 +294,6 @@ class Maze:
         #pyo.plot(fig, filename='graph.html')
         fig.show()
 
-        
-    def initQ(self):
-        g = self.getGraph()
-        print(f"rows: {self.rowsInMaze}, columns: {self.columnsInMaze}")
     
     def mow(self, row, col):
         self.distance = self.distance + 1
@@ -382,11 +387,10 @@ class Maze:
             self.wn.exitonclick()
             #self.wn.mainloop()
         else:
-            self.initQ()
             self.mow(*self.current_pos)
             # Run the algo
             for x, y in searchFunction(self.current_pos[1],-self.current_pos[0],
-                                       round(self.t.heading()), self.lawn):
+                                       round(self.t.heading()), self.lawn, self.getGraph()):
                 if (x, y) == (math.inf, 0):
                     # this is the code return by the algo to say there is not path to some unmowed lawn
                     print(f"Cannot access unmowed lawn")

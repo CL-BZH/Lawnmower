@@ -3,9 +3,10 @@ import plotly.offline as pyo
 import plotly.graph_objs as go
 from maze_conf import *
 import time
-import numpy as np
+#import numpy as np
 import matplotlib.pyplot as plt
 import math
+
 
 
 #turtle.mode('logo')
@@ -195,6 +196,7 @@ class Maze:
                     vertices_colors.append(color)
         # Get all neighbor nodes
         adjency = {}
+        #adjency_matrix = np.zeros((vertices, vertices))
         for vertex, color in zip(vertices, vertices_colors):
             directions = self.getDirections(*vertex)
             neighbors = []
@@ -219,7 +221,18 @@ class Maze:
                             continue
                     neighbors.append((neighbor, weight))
             adjency[vertex] = (color, neighbors)
-        print(adjency)
+        #print(adjency)
+        neighbors = {neighbor[0]:neighbor[1:][0][1] for neighbor in adjency.items()}
+        keys = sorted(neighbors.keys())
+        size = len(keys)
+        M = [ [0]*size for i in range(size) ]
+        for a,b,w in [(keys.index(a), keys.index(b), w) for (a, row) in neighbors.items() for b,w in row]:
+            #print(f"a={a}, b={b}")
+            M[a][b] = 0 if (a==b) else w
+        ts = size**2 * 2**size * 10**-9 * 10**-9
+        tmin = ts / 60
+        th = tmin /60
+        print(f"There is {size} vertices. This may take about {ts} seconds ({tmin} minutes => {th} hours)")
         return adjency
 
     def drawGraph(self, g=None):
@@ -429,3 +442,4 @@ class Maze:
         
     def __getitem__(self,idx):
         return self.mazelist[idx]
+    

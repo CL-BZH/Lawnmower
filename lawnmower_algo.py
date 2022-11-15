@@ -1,11 +1,12 @@
 import time
+from timeit import default_timer as timer
 import random
 import math
 from queue import PriorityQueue
 
 
 #
-def drunkard_walk(x, y, heading, valid_xy):
+def drunkard_walk(x, y, heading, valid_xy, graph=None):
     offsets = [(0,1), (0,-1), (1,0), (1,1), (1,-1), (-1,0), (-1,1), (-1,-1),]
     while True:
         dx, dy = random.choice(offsets)
@@ -17,7 +18,7 @@ def drunkard_walk(x, y, heading, valid_xy):
         yield (x, y)
 
 
-def random_walk(x, y, heading, valid_xy):
+def random_walk(x, y, heading, valid_xy, graph=None):
     ''' 
     The difference with the drunkard walk is that we keep track of the cell
     already visited.
@@ -53,7 +54,7 @@ def random_walk(x, y, heading, valid_xy):
             continue
         yield (x, y)
 
-def random_walk_with_policy(x, y, heading, valid_xy):
+def random_walk_with_policy(x, y, heading, valid_xy, graph=None):
     ''' 
     The difference with the random walk is that we try to enforce a policy.
     '''
@@ -94,7 +95,7 @@ def random_walk_with_policy(x, y, heading, valid_xy):
         heading = angles[(dx, dy)]
         yield (x, y)
 
-def mc_greedy_learning(start_x, start_y, heading, valid_xy):
+def mc_greedy_learning(start_x, start_y, heading, valid_xy, graph=None):
     print(f"Number of cell to mow: {len(valid_xy)}")
     epochs = 5*len(valid_xy)
     paths = PriorityQueue()
@@ -125,7 +126,7 @@ def mc_greedy_learning(start_x, start_y, heading, valid_xy):
     for node in path:
         yield node
     
-def greedy_walk(x, y, heading, valid_xy, learn=False):
+def greedy_walk(x, y, heading, valid_xy, learn=False, graph=None):
     ''' 
     The difference with the random walk is that we try to enforce a policy.
     '''
@@ -434,11 +435,18 @@ def hamilton_cycle_util(path, graph, vertices):
     neighbors = graph[path[-1]][1:][0]
     if neighbors == []:
         print(f"BUG: neighbors list for {path[-1]} is empty")
+        exit(1)
 
-    closest_neighbors = [neighbor for neighbor, weight in neighbors if weight == 1]
+    closest_neighbors = [neighbor for neighbor, weight in neighbors if weight == 1 and neighbor not in path]
+    #print(f"closest neighbors: {closest_neighbors}")
+    
+    if closest_neighbors == []:
+        #print("Take diag neighbors")
+        closest_neighbors = [neighbor for neighbor, weight in neighbors]
 
     if closest_neighbors == []:
-        closest_neighbors = [neighbor for neighbor, weight in neighbors]
+        print(f"++++BUG: neighbors list for {path[-1]} is empty")
+        exit(1)
 
     # Shuffle of neighbors list
     random.shuffle(closest_neighbors)
@@ -450,20 +458,29 @@ def hamilton_cycle_util(path, graph, vertices):
                 return path
 
             path.remove(path[-1])
-    
+
+    #print("No solution. Return empty path")
     return []
 
     
 def hamilton_cycle(start_x, start_y, heading, valid_xy, graph):
 
+    start = timer()
+    
     path = [(-start_y, start_x)]
- 
-    if hamilton_cycle_util(path, graph, len(valid_xy)) == False:
+    
+    if hamilton_cycle_util(path, graph, len(valid_xy)) == []:
         print ("Solution does not exist\n")
         return []
 
     #print(f"Path to return: {path[1::]}")
+    end = timer()
+    
+    print(f"Time consumed to find hamilton path: {end - start} seconds")
     
     for (x, y) in path[1::]:
-        print(f"yield {(-y, x)}")
+        #print(f"yield {(-y, x)}")
         yield (y, -x)
+        
+
+

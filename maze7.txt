@@ -1,10 +1,10 @@
 ++++++++++
 +LLLLLLLL+
 +LLLLLLLL+
++LLLLLLLL+
 +LL+++LLL+
 +LL+++LLL+
-+LL+++LLL+
-+LL+LLLLL+
++LL++LLLL+
 +LLLLLLLL+
 ++LLL+++++
 ++++++++++

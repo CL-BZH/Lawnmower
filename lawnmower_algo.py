@@ -425,9 +425,16 @@ def a_star_algorithm(start, stop, valid_nodes, offsets):
 
 
 
-def hamilton_cycle_util(path, graph, vertices):
+def hamilton_path_util(path, graph, vertices, cycle=False):
     # base case: if all vertices are included in the path
     if len(path) == vertices:
+        if cycle == True:
+            neighbors = graph[path[-1]][1:][0]
+            neighbors = [neighbor for neighbor, weight in neighbors]
+            #print(f"neighbors of {path[-1]} are {neighbors}")
+            if path[0] not in neighbors:
+                print(f"path: {path}")
+                return []
         return path
 
     #print(f"Path: {path}")
@@ -454,7 +461,7 @@ def hamilton_cycle_util(path, graph, vertices):
     for neighbor in closest_neighbors:
         if neighbor not in path:
             path.append(neighbor)
-            if hamilton_cycle_util(path, graph, vertices) != []:
+            if hamilton_path_util(path, graph, vertices, cycle) != []:
                 return path
 
             path.remove(path[-1])
@@ -463,13 +470,13 @@ def hamilton_cycle_util(path, graph, vertices):
     return []
 
     
-def hamilton_cycle(start_x, start_y, heading, valid_xy, graph):
+def hamilton_path(start_x, start_y, heading, valid_xy, graph):
 
     start = timer()
     
     path = [(-start_y, start_x)]
     
-    if hamilton_cycle_util(path, graph, len(valid_xy)) == []:
+    if hamilton_path_util(path, graph, len(valid_xy), cycle=True) == []:
         print ("Solution does not exist\n")
         return []
 

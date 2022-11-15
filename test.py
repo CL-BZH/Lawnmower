@@ -10,9 +10,12 @@ from lawnmower_algo import hamilton_cycle
 #maze = Maze('maze0.txt')
 #maze = Maze('maze1.txt')
 #maze = Maze('maze2.txt')
-maze = Maze('maze3.txt')
-#maze = Maze('maze4.txt')
+#maze = Maze('maze3.txt')
+maze = Maze('maze4.txt')
 #maze = Maze('maze5.txt')
+#maze = Maze('maze6.txt')
+#maze = Maze('maze7.txt')
+#maze = Maze('maze8.txt')
 
 # Draw the maze
 maze.drawMaze()
@@ -29,7 +32,7 @@ maze.setStart(row=3, col=1, heading=0)
 
 
 # Set the turtle speed (between 1 and 10) (default to 3)
-maze.setSpeed(10)
+maze.setSpeed(1)
 
 # Start mowing the lawn
 #maze.run(drunkard_walk)
@@ -45,4 +48,3 @@ maze.run(hamilton_cycle)
 #maze.drawGraph()
 
 # Plot efficiency
-#maze.plotEfficiency()

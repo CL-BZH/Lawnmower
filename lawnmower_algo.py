@@ -433,7 +433,7 @@ def hamilton_path_util(path, graph, vertices, cycle=False):
             neighbors = [neighbor for neighbor, weight in neighbors]
             #print(f"neighbors of {path[-1]} are {neighbors}")
             if path[0] not in neighbors:
-                print(f"path: {path}")
+                #print(f"path: {path}")
                 return []
         return path
 
@@ -446,7 +446,7 @@ def hamilton_path_util(path, graph, vertices, cycle=False):
 
     closest_neighbors = [neighbor for neighbor, weight in neighbors if weight == 1 and neighbor not in path]
     #print(f"closest neighbors: {closest_neighbors}")
-    
+
     if closest_neighbors == []:
         #print("Take diag neighbors")
         closest_neighbors = [neighbor for neighbor, weight in neighbors]
@@ -458,7 +458,33 @@ def hamilton_path_util(path, graph, vertices, cycle=False):
     # Shuffle of neighbors list
     random.shuffle(closest_neighbors)
     
-    for neighbor in closest_neighbors:
+    ordered_neighbors = []
+    
+    if len(path) >= 2:
+        (r1, c1) = path[-1]
+        (r2, c2) = path[-2]
+        delta_r = r1 - r2
+        delta_c = c1 - c2
+        if delta_r == 0:
+            #try to keep going on the same line if possible
+            ordered_neighbors += [item for item in closest_neighbors if item[0]==r1]
+        elif delta_c == 0:
+            #try to keep going on the same column if possible
+            ordered_neighbors += [item for item in closest_neighbors if item[1]==c1]
+        else:
+            #try to keep going on the same diagonal if possible
+            ordered_neighbors += [item for item in closest_neighbors if
+                                  (abs(item[0] - r1)==1 and abs(item[1]-c1)==1)]
+
+    ordered_neighbors += [item for item in closest_neighbors if item not in ordered_neighbors]
+
+    #print(f"ordered_neighbors: {ordered_neighbors}")
+    
+    if len(ordered_neighbors) == 0:
+        print("Empty list")
+        exit(-1)
+    
+    for neighbor in ordered_neighbors:
         if neighbor not in path:
             path.append(neighbor)
             if hamilton_path_util(path, graph, vertices, cycle) != []:
@@ -488,6 +514,3 @@ def hamilton_path(start_x, start_y, heading, valid_xy, graph):
     for (x, y) in path[1::]:
         #print(f"yield {(-y, x)}")
         yield (y, -x)
-        
-
-

@@ -127,3 +127,13 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# OS / editors
+.DS_Store
+*~
+
+# generated outputs
+*.png
+*.gif
+!docs/*.png
+!docs/*.gif

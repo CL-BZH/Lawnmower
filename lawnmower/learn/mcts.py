@@ -173,7 +173,7 @@ def mcts_mow(net: CoverageNet, lawn: Lawn, simulations: int = 64, c_puct: float 
              device: torch.device | None = None) -> Result:
     """Mow ``lawn`` choosing every move with MCTS; return the evaluated path."""
     env = LawnmowerEnv(lawn, rewards=rewards, max_steps_factor=max_steps_factor,
-                       turn_memory=net.config["in_channels"] == 5)
+                       turn_memory=net.config.get("turn_memory", 0))
     obs, info = env.reset()
     search = MCTS(net, rewards, gamma, reward_scale, simulations, c_puct, backup, device)
     done = False

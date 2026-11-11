@@ -16,9 +16,12 @@ Observation
     1. already mowed
     2. mower position
     3. the cell straight ahead of the mower (encodes its heading spatially)
-    4. only with ``turn_memory=True``: at the mower's cell, the number of steps
-       since its last turn, ``min(x, 10) / 10``.  Needed when the reward
-       depends on it (``Rewards.turn_repeat``), see below.
+    4. only with ``turn_memory=K`` (``True`` = 10): at the mower's cell, the
+       number of steps since its last turn, ``min(x, K) / K``.  Needed when
+       the reward depends on it (``Rewards.turn_repeat``), see below; ``K``
+       must be at least the number of steps the surcharge takes to fade
+       (:meth:`Rewards.memory_horizon`), or the reward depends again on
+       something the agent cannot see.
 
 Action
     ``Discrete(8)``: index into :data:`lawnmower.grid.DIRECTIONS`
@@ -49,6 +52,7 @@ Episodes end (``terminated``) at full coverage and are truncated after
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Any, Sequence
 
@@ -83,6 +87,12 @@ class Rewards:
         """Reward per 45 degrees for a turn made that many steps after the last one."""
         return -max(-self.turn, -self.turn_repeat - self.turn_decay * steps_since_turn)
 
+    def memory_horizon(self) -> int:
+        """Channel-4 cap for this reward: at least the steps the surcharge needs to fade."""
+        if self.turn_repeat >= self.turn or self.turn_decay <= 0:
+            return 10
+        return max(10, math.ceil((self.turn - self.turn_repeat) / self.turn_decay - 1e-9))
+
 
 class LawnmowerEnv(gym.Env):
     metadata = {"render_modes": ["ansi", "rgb_array"], "render_fps": 10}
@@ -96,7 +106,7 @@ class LawnmowerEnv(gym.Env):
         random_start: bool = False,
         render_mode: str | None = None,
         obs_size: tuple[int, int] | None = None,
-        turn_memory: bool = False,
+        turn_memory: int | bool = False,
     ) -> None:
         super().__init__()
         self.lawns = [lawns] if isinstance(lawns, Lawn) else list(lawns)
@@ -107,8 +117,9 @@ class LawnmowerEnv(gym.Env):
         self.view_radius = view_radius
         self.random_start = random_start
         self.render_mode = render_mode
-        self.turn_memory = turn_memory
-        self.n_channels = 5 if turn_memory else 4
+        # cap of channel 4 (0 = no channel 4); True keeps the original cap of 10
+        self.turn_memory = 10 if turn_memory is True else int(turn_memory)
+        self.n_channels = 5 if self.turn_memory else 4
 
         if view_radius is None:
             # pad every lawn to a common size so the observation shape is fixed
@@ -212,7 +223,7 @@ class LawnmowerEnv(gym.Env):
             if self.lawn.in_bounds(ahead):
                 planes[3][ahead] = 1.0
         if self.turn_memory:
-            planes[4][self.pos] = min(self.since_turn, 10) / 10
+            planes[4][self.pos] = min(self.since_turn, self.turn_memory) / self.turn_memory
         return planes
 
     def _obs(self) -> np.ndarray:

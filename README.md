@@ -268,51 +268,68 @@ a cost it cannot see.
 
 The fix is to put the missing information back into the state: with
 `--turn-repeat > 0`, the environment adds a **5th channel** holding, at the
-mower's cell, the number of steps since its last turn (`min(x, 10) / 10`).
-The network reads its number of input channels from the checkpoint, so older
-4-channel models keep working. The same rule applies to any reward you
-invent: if it depends on something, the agent must be able to observe it.
+mower's cell, the number of steps since its last turn, `min(x, K) / K`.
+The cap `K` must be at least the number of steps the surcharge takes to
+fade (10 here, 15 for `--turn-repeat 0.2`). With a smaller cap, turns made
+11 and 14 steps after the last one would look the same to the agent but
+cost differently, and the problem would be back. The network reads its
+number of input channels and `K` from the checkpoint, so older 4-channel
+models keep working. The same rule applies to any reward you invent: if it
+depends on something, the agent must be able to observe it.
 
-**Result.** The model `models/agent_turns.pt` was trained exactly like
-`models/agent_small.pt`: same maps, symmetries and curriculum, same 1.25M
-steps, but with `--turn-repeat 0.1`. Both models are run best-of-16 on the
-example maps and best-of-8 on 60 unseen random gardens of size 8–14. Each
-cell gives steps / turns / mean straight run (`mean_run` = steps per straight
-run, now reported by `python -m lawnmower run`):
+**Result.** Two models were trained exactly like `models/agent_small.pt`
+(same maps, symmetries and curriculum, same 1.25M steps), with
+`--turn-repeat 0.1` (`models/agent_turns.pt`) and `--turn-repeat 0.2`
+(`models/agent_turns_strong.pt`). With 0.2, a turn right after another costs
+almost four times the base price, a U-turn costs 0.48 (4.8 steps instead
+of 2), and the surcharge takes 15 steps to fade, so channel 4 counts up to
+15 instead of 10 (`Rewards.memory_horizon()`; the cap is stored in the
+checkpoint). The agents are run best-of-16 on the example maps and
+best-of-8 on 60 unseen random gardens of size 8–14. Each cell gives
+steps / turns / mean straight run (`mean_run` = steps per straight run, now
+reported by `python -m lawnmower run`):
 
-| map      |   N | `agent_small` | `agent_turns`  |
-|----------|----:|---------------|----------------|
-| maze3    |  43 | 42 / 14 / 2.8 | 42 / 12 / 3.2  |
-| maze4    |  42 | 42 / 13 / 3.0 | 41 / 19 / 2.0  |
-| maze7a   |  25 | 25 / 9 / 2.5  | 25 / 8 / 2.8   |
-| maze0    | 262 | 269 / 64 / 4.1 | 270 / 51 / 5.2 |
-| maze2    | 404 | 435 / 90 / 4.8 | 437 / 81 / 5.3 |
-| maze6    | 438 | 465 / 105 / 4.4 | 473 / 112 / 4.2 |
-| maze8    | 406 | 425 / 97 / 4.3 | 438 / 105 / 4.1 |
-| test_map | 347 | 406 / 187 / 2.2 | 439 / 181 / 2.4 |
-| maze1    | 426 | 513 / 119 / 4.3 | 458 / 101 / 4.5 |
-| 60 random gardens | | overhead 1.046, 35.2 turns/100 cells, run 2.94 | overhead 1.054, 34.1 turns/100 cells, run 3.01 |
+| map      |   N | boustrophedon | `agent_small` | `agent_turns` (0.1) | `agent_turns_strong` (0.2) |
+|----------|----:|---------------|---------------|---------------------|----------------------------|
+| maze3    |  43 | 48 / 23 / 2.0 | 42 / 14 / 2.8 | 42 / 12 / 3.2 | 42 / 12 / 3.2 |
+| maze4    |  42 | 44 / 21 / 2.0 | 42 / 13 / 3.0 | 41 / 19 / 2.0 | 42 / 13 / 3.0 |
+| maze7a   |  25 | 26 / 15 / 1.6 | 25 / 9 / 2.5  | 25 / 8 / 2.8  | 25 / 8 / 2.8  |
+| maze0    | 262 | 282 / 52 / 5.3 | 269 / 64 / 4.1 | 270 / 51 / 5.2 | 275 / 53 / 5.1 |
+| maze2    | 404 | 443 / 71 / 6.2 | 435 / 90 / 4.8 | 437 / 81 / 5.3 | 459 / 83 / 5.5 |
+| maze6    | 438 | 495 / 85 / 5.8 | 465 / 105 / 4.4 | 473 / 112 / 4.2 | 476 / 90 / 5.2 |
+| maze8    | 406 | 464 / 79 / 5.8 | 425 / 97 / 4.3 | 438 / 105 / 4.1 | 489 / 96 / 5.0 |
+| test_map | 347 | 442 / 167 / 2.6 | 406 / 187 / 2.2 | 439 / 181 / 2.4 | 444 / 161 / 2.7 |
+| maze1    | 426 | 500 / 84 / 5.9 | 513 / 119 / 4.3 | 458 / 101 / 4.5 | 494 / 105 / 4.7 |
+| **6 large maps, total** | | **2626 / 538** | **2513 / 662** | **2515 / 631** | **2637 / 588** |
+| 60 random gardens: overhead, turns per 100 cells, run | | 1.108, 36.4, 3.00 | 1.046, 35.2, 2.94 | 1.054, 34.1, 3.01 | 1.066, 32.9, 3.17 |
 
-(maze5, maze7 and maze7b: identical paths.) Summed over the six large maps,
-the new model makes 631 turns instead of 662 (−5%) for the same number of
-steps (2515 vs 2513). On the unseen gardens it makes 3% fewer turns for
-0.8% more steps. Training for the full 1.5M steps gives about the same
-result. So the agent is **slightly straighter, at almost no cost, but it
-still snakes**. It is also less consistent: it wins clearly on maze0 and
-maze1, and loses on maze8 and test_map.
+(maze5, maze7 and maze7b: identical paths for the three agents.)
 
-The reason is a lesson in itself: compared with what is at stake, the
-penalty is small. A U-turn now costs 0.8 step more, but the agent mostly
-snakes because it does not plan far enough ahead to see where long passes
-would fit. The reward says *what* is better, not *how* to find it.
-Boustrophedon, which plans the passes explicitly, still has the longest
-runs on most large maps (5–6 steps), but needs 1–9% more steps than
-`agent_turns`. Pushing `--turn-repeat` higher
-trades steps for straightness; a weight that overrides the step cost would
-make the agent prefer a longer path just to turn less.
+* With **0.1** the agent is slightly straighter at almost no cost: 5% fewer
+  turns on the large maps for the same number of steps, and 3% fewer on the
+  unseen gardens for 0.8% more steps. It is less consistent, though: it wins
+  clearly on maze0 and maze1, and loses on maze8 and test_map.
+* With **0.2** the trade-off is clear: 11% fewer turns than `agent_small` on
+  the large maps for 5% more steps, and 7% fewer turns on the unseen
+  gardens for 2% more steps. The mean run grows on almost every map.
 
-`agent_small.pt` stays the default model. To try the new one:
-`python -m lawnmower run -p agent --model models/agent_turns.pt maps/maze0.txt`.
+The stronger penalty does not make the agent *better*. It moves it along a
+trade-off curve between steps and turns, and the weight chooses the point.
+On the large maps, 0.2 brings the agent to about the number of steps of
+boustrophedon (2637 vs 2626), but with more turns (588 vs 538). There, the
+planner, which lays out its passes explicitly, now does better. On lawns
+like those it was trained on, the agent still beats boustrophedon on both
+counts: fewer steps *and* fewer turns.
+
+That is a lesson in itself: the reward says *what* is better, not *how* to
+find it. The agent mostly snakes because it does not see far enough ahead
+to know where long passes would fit. A larger penalty makes it accept
+detours to avoid turns, but it does not teach it to plan the passes. That
+would take a longer look-ahead (MCTS with a value head trained on large
+lawns), or training on large lawns.
+
+`agent_small.pt` stays the default model. To try the others:
+`python -m lawnmower run -p agent --model models/agent_turns_strong.pt maps/maze0.txt`.
 
 ### Generalising, or specialising on one map
 

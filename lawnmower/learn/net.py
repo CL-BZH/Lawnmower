@@ -36,10 +36,16 @@ class ResBlock(nn.Module):
 
 class CoverageNet(nn.Module):
     def __init__(self, in_channels: int = 4, channels: int = 32,
-                 dilations: tuple[int, ...] = (1, 2, 4, 8, 16), hidden: int = 128):
+                 dilations: tuple[int, ...] = (1, 2, 4, 8, 16), hidden: int = 128,
+                 turn_memory: int = 0):
         super().__init__()
+        # turn_memory: cap of observation channel 4 (steps since the last turn),
+        # stored so that the agent is later run with the observation it was trained on
+        if in_channels == 5 and not turn_memory:
+            turn_memory = 10  # checkpoints from before the cap was configurable
         self.config = dict(in_channels=in_channels, channels=channels,
-                           dilations=tuple(dilations), hidden=hidden)
+                           dilations=tuple(dilations), hidden=hidden,
+                           turn_memory=turn_memory if in_channels == 5 else 0)
         self.stem = nn.Conv2d(in_channels, channels, 3, padding=1)
         self.trunk = nn.Sequential(*(ResBlock(channels, d) for d in dilations))
         # policy: features of the 9 cells around the mower -> 8 logits

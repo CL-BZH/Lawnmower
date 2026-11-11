@@ -98,7 +98,7 @@ class VecEnv:
 
     def __init__(self, n: int, source: LawnSource, rewards: Rewards,
                  max_steps_factor: float, obs_size: tuple[int, int],
-                 turn_memory: bool = False):
+                 turn_memory: int = 0):
         self.source = source
         first = source()
         self.envs = [LawnmowerEnv(first, rewards=rewards, max_steps_factor=max_steps_factor,
@@ -160,9 +160,9 @@ class PPOConfig:
     seed: int = 0
 
 
-def uses_turn_memory(net: CoverageNet) -> bool:
-    """True if the network was built for the 5-channel observation."""
-    return net.config["in_channels"] == 5
+def uses_turn_memory(net: CoverageNet) -> int:
+    """Cap of channel 4 the network was trained with (0 = 4-channel observation)."""
+    return net.config.get("turn_memory", 0)
 
 
 def get_device(device: str | None = None) -> torch.device:
@@ -187,7 +187,7 @@ def load_checkpoint(path: str | Path, device: torch.device | None = None) -> tup
 
 # ---------------------------------------------------------- behaviour cloning
 def collect_demos(source: Callable[[], Lawn], n_lawns: int, teacher: str,
-                  obs_size: tuple[int, int], turn_memory: bool = False):
+                  obs_size: tuple[int, int], turn_memory: int = 0):
     """Replay the planner ``teacher`` on ``n_lawns`` lawns: (obs, mask, action)."""
     obs, masks, acts = [], [], []
     for _ in range(n_lawns):

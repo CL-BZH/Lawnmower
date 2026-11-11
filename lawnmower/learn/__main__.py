@@ -50,8 +50,9 @@ def cmd_train(a) -> None:
     else:
         torch.manual_seed(a.seed)
         # the consecutive-turn penalty needs the 5th channel (steps since the last turn)
-        net = CoverageNet(in_channels=5 if a.turn_repeat > 0 else 4,
-                          channels=a.channels).to(device)
+        memory = cfg.rewards.memory_horizon() if a.turn_repeat > 0 else 0
+        net = CoverageNet(in_channels=5 if memory else 4, channels=a.channels,
+                          turn_memory=memory).to(device)
     (out / "config.json").write_text(json.dumps(
         {"args": vars(a), "ppo": asdict(cfg), "net": net.config}, indent=2, default=str))
 
@@ -60,7 +61,7 @@ def cmd_train(a) -> None:
         demo_source = LawnSource(maps, p_random=source.p_random, random_size=tuple(a.size),
                                  symmetries=source.symmetries, seed=a.seed + 1)
         demos = collect_demos(demo_source, a.bc_lawns, a.bc_teacher, source.max_shape,
-                              turn_memory=net.config["in_channels"] == 5)
+                              turn_memory=net.config["turn_memory"])
         behaviour_cloning(net, demos, epochs=a.bc_epochs, device=device)
         save_checkpoint(out / "agent_bc.pt", net, 0, {"bc_teacher": a.bc_teacher})
     if a.steps > start:

@@ -268,6 +268,24 @@ def test_consecutive_turn_penalty_and_turn_memory():
     assert obs[4][env.pos] == pytest.approx(0.2)
     # default rewards: same cost for every turn, 4 channels
     assert LawnmowerEnv(rect(2, 2)).reset()[0].shape[0] == 4
+    # the channel must count at least as long as the surcharge lasts
+    assert rw.memory_horizon() == 10
+    strong = Rewards(turn=-0.05, turn_repeat=-0.2, turn_decay=0.01)
+    assert strong.memory_horizon() == 15
+    assert strong.turn_cost(14) < strong.turn_cost(15) == pytest.approx(-0.05)
+    env = LawnmowerEnv(rect(1, 30), rewards=strong, turn_memory=15)
+    env.reset(seed=0)
+    env.since_turn = 12
+    assert env._planes()[4][env.pos] == pytest.approx(12 / 15)
+
+
+def test_net_remembers_its_turn_memory():
+    pytest.importorskip("torch")
+    from lawnmower.learn.net import CoverageNet
+
+    assert CoverageNet().config["turn_memory"] == 0
+    assert CoverageNet(in_channels=5).config["turn_memory"] == 10  # old checkpoints
+    assert CoverageNet(in_channels=5, turn_memory=15).config["turn_memory"] == 15
 
 
 def test_mean_run_metric():

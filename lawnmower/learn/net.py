@@ -53,7 +53,7 @@ class CoverageNet(nn.Module):
         self.register_buffer("nb_index", torch.tensor(_NEIGHBOUR_INDEX), persistent=False)
 
     def forward(self, obs: torch.Tensor, mask: torch.Tensor | None = None):
-        """``obs`` (B, 4, H, W) as produced by the env; ``mask`` (B, 8) legal actions.
+        """``obs`` (B, 4 or 5, H, W) as produced by the env; ``mask`` (B, 8) legal actions.
 
         Returns ``(logits, value)`` with shapes (B, 8) and (B,).
         """

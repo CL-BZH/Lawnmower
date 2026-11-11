@@ -97,11 +97,13 @@ class VecEnv:
     """``n`` LawnmowerEnv in lock-step, with automatic reset on a new lawn."""
 
     def __init__(self, n: int, source: LawnSource, rewards: Rewards,
-                 max_steps_factor: float, obs_size: tuple[int, int]):
+                 max_steps_factor: float, obs_size: tuple[int, int],
+                 turn_memory: bool = False):
         self.source = source
         first = source()
         self.envs = [LawnmowerEnv(first, rewards=rewards, max_steps_factor=max_steps_factor,
-                                  obs_size=obs_size) for _ in range(n)]
+                                  obs_size=obs_size, turn_memory=turn_memory)
+                     for _ in range(n)]
         self.episode_return = np.zeros(n)
         self.finished: list[dict] = []
 
@@ -158,6 +160,11 @@ class PPOConfig:
     seed: int = 0
 
 
+def uses_turn_memory(net: CoverageNet) -> bool:
+    """True if the network was built for the 5-channel observation."""
+    return net.config["in_channels"] == 5
+
+
 def get_device(device: str | None = None) -> torch.device:
     if device:
         return torch.device(device)
@@ -180,13 +187,13 @@ def load_checkpoint(path: str | Path, device: torch.device | None = None) -> tup
 
 # ---------------------------------------------------------- behaviour cloning
 def collect_demos(source: Callable[[], Lawn], n_lawns: int, teacher: str,
-                  obs_size: tuple[int, int]):
+                  obs_size: tuple[int, int], turn_memory: bool = False):
     """Replay the planner ``teacher`` on ``n_lawns`` lawns: (obs, mask, action)."""
     obs, masks, acts = [], [], []
     for _ in range(n_lawns):
         lawn = source()
         path = plan(lawn, teacher).path
-        env = LawnmowerEnv(lawn, obs_size=obs_size)
+        env = LawnmowerEnv(lawn, obs_size=obs_size, turn_memory=turn_memory)
         o, info = env.reset()
         for a in path_to_actions(path):
             obs.append(o)
@@ -235,11 +242,13 @@ def train_ppo(net: CoverageNet, source: LawnSource, cfg: PPOConfig, out_dir: str
     net.to(device)
     torch.manual_seed(cfg.seed)
     obs_size = source.max_shape
-    vec = VecEnv(cfg.n_envs, source, cfg.rewards, cfg.max_steps_factor, obs_size)
+    channels = net.config["in_channels"]
+    vec = VecEnv(cfg.n_envs, source, cfg.rewards, cfg.max_steps_factor, obs_size,
+                 turn_memory=uses_turn_memory(net))
     opt = torch.optim.Adam(net.parameters(), lr=cfg.lr, eps=1e-5)
 
     n, T = cfg.n_envs, cfg.n_steps
-    obs_buf = torch.zeros((T, n, 4, *obs_size), device=device)
+    obs_buf = torch.zeros((T, n, channels, *obs_size), device=device)
     mask_buf = torch.zeros((T, n, 8), dtype=torch.bool, device=device)
     act_buf = torch.zeros((T, n), dtype=torch.long, device=device)
     logp_buf = torch.zeros((T, n), device=device)
@@ -300,7 +309,7 @@ def train_ppo(net: CoverageNet, source: LawnSource, cfg: PPOConfig, out_dir: str
             adv[t] = last
         ret = adv + val_buf
 
-        b_obs = obs_buf.reshape(n * T, 4, *obs_size)
+        b_obs = obs_buf.reshape(n * T, channels, *obs_size)
         b_mask, b_act = mask_buf.reshape(n * T, 8), act_buf.reshape(-1)
         b_logp, b_adv, b_ret = logp_buf.reshape(-1), adv.reshape(-1), ret.reshape(-1)
         net.train()
@@ -365,7 +374,8 @@ def run_policy(net: CoverageNet, lawn: Lawn, greedy: bool = True, samples: int =
     gen = torch.Generator(device="cpu").manual_seed(seed)
     best: Result | None = None
     for _ in range(1 if greedy else samples):
-        env = LawnmowerEnv(lawn, max_steps_factor=max_steps_factor)
+        env = LawnmowerEnv(lawn, max_steps_factor=max_steps_factor,
+                           turn_memory=uses_turn_memory(net))
         o, info = env.reset()
         done = False
         while not done:

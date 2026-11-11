@@ -30,6 +30,7 @@ class Metrics:
     turns:        number of heading changes
     turn_angle:   total absolute heading change, in degrees
     revisits:     moves that land on an already-mowed cell (wasted passes)
+    mean_run:     steps per straight run, steps / (turns + 1)
     """
 
     target: int
@@ -47,6 +48,11 @@ class Metrics:
     @property
     def complete(self) -> bool:
         return self.mowed == self.target
+
+    @property
+    def mean_run(self) -> float:
+        """Mean number of steps between turns: long straight passes score high."""
+        return self.steps / (self.turns + 1)
 
     @property
     def overhead(self) -> float:
@@ -70,6 +76,7 @@ class Metrics:
             "turns": self.turns,
             "turn_angle": round(self.turn_angle),
             "revisits": self.revisits,
+            "mean_run": round(self.mean_run, 2),
             "overhead": round(self.overhead, 3),
         }
 

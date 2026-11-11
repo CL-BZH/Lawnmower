@@ -66,11 +66,11 @@ class Node:
 
 
 def _snapshot(env: LawnmowerEnv) -> tuple:
-    return (env.pos, env.heading, env.steps, env._mowed.copy(), env._todo)
+    return (env.pos, env.heading, env.steps, env.since_turn, env._mowed.copy(), env._todo)
 
 
 def _restore(env: LawnmowerEnv, snap: tuple) -> None:
-    env.pos, env.heading, env.steps, mowed, env._todo = snap
+    env.pos, env.heading, env.steps, env.since_turn, mowed, env._todo = snap
     env._mowed = mowed.copy()
     env.path = [env.pos]
 
@@ -156,7 +156,8 @@ class MCTS:
         self.q_min, self.q_max = math.inf, -math.inf
         snap = _snapshot(env)
         sim = LawnmowerEnv(env.lawn, rewards=self.rewards,
-                           max_steps_factor=env.max_steps_factor)
+                           max_steps_factor=env.max_steps_factor,
+                           turn_memory=env.turn_memory)
         sim.reset(options={"lawn": env.lawn})
         for _ in range(self.simulations):
             self._simulate(sim, snap)
@@ -171,7 +172,8 @@ def mcts_mow(net: CoverageNet, lawn: Lawn, simulations: int = 64, c_puct: float 
              reward_scale: float = 0.1, max_steps_factor: float = 4.0,
              device: torch.device | None = None) -> Result:
     """Mow ``lawn`` choosing every move with MCTS; return the evaluated path."""
-    env = LawnmowerEnv(lawn, rewards=rewards, max_steps_factor=max_steps_factor)
+    env = LawnmowerEnv(lawn, rewards=rewards, max_steps_factor=max_steps_factor,
+                       turn_memory=net.config["in_channels"] == 5)
     obs, info = env.reset()
     search = MCTS(net, rewards, gamma, reward_scale, simulations, c_puct, backup, device)
     done = False

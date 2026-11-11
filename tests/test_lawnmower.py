@@ -245,3 +245,32 @@ def test_mcts_mows_a_small_lawn():
     for backup in ("mean", "max"):
         res = mcts_mow(CoverageNet(channels=8), lawn, simulations=32, backup=backup)
         assert res.metrics.complete  # evaluate() has also checked every move
+
+
+def test_consecutive_turn_penalty_and_turn_memory():
+    from gymnasium.utils.env_checker import check_env
+    from lawnmower.rl import LawnmowerEnv, Rewards
+
+    rw = Rewards(new_cell=0, step=0, turn=-0.05, turn_repeat=-0.1, turn_decay=0.01,
+                 complete=0)
+    assert rw.turn_cost(1) == pytest.approx(-0.09)
+    assert rw.turn_cost(5) == pytest.approx(-0.05) == rw.turn_cost(50)
+    env = LawnmowerEnv(rect(4, 4), rewards=rw, turn_memory=True)
+    check_env(env, skip_render_check=True)
+    obs, _ = env.reset(seed=0)
+    assert obs.shape == (5, 6, 6)
+    E, S, W = 0, 6, 4
+    rewards = [env.step(a)[1] for a in (E, E, S, W)]
+    # E, E: no turn; S: first turn (90 deg, base cost); W: right after it (x = 1)
+    assert rewards == pytest.approx([0, 0, 2 * -0.05, 2 * -0.09])
+    assert env.since_turn == 1
+    obs = env.step(W)[0]
+    assert obs[4][env.pos] == pytest.approx(0.2)
+    # default rewards: same cost for every turn, 4 channels
+    assert LawnmowerEnv(rect(2, 2)).reset()[0].shape[0] == 4
+
+
+def test_mean_run_metric():
+    lawn = rect(1, 4)
+    m, _ = evaluate(lawn, [(1, 1), (1, 2), (1, 3), (1, 4)])
+    assert m.turns == 0 and m.mean_run == 3

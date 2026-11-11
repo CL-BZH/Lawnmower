@@ -40,7 +40,8 @@ def cmd_train(a) -> None:
     cfg = PPOConfig(total_steps=a.steps, n_envs=a.envs, n_steps=a.n_steps, lr=a.lr,
                     gamma=a.gamma, ent_coef=a.ent_coef, seed=a.seed,
                     save_every=a.save_every, max_steps_factor=a.max_steps_factor,
-                    rewards=Rewards(turn=-a.turn_penalty))
+                    rewards=Rewards(turn=-a.turn_penalty, turn_repeat=-a.turn_repeat,
+                                    turn_decay=a.turn_decay))
     start = 0
     if a.resume:
         net, ck = load_checkpoint(a.resume, device)
@@ -48,7 +49,9 @@ def cmd_train(a) -> None:
         print(f"resumed from {a.resume} (step {ck.get('step', 0)})")
     else:
         torch.manual_seed(a.seed)
-        net = CoverageNet(channels=a.channels).to(device)
+        # the consecutive-turn penalty needs the 5th channel (steps since the last turn)
+        net = CoverageNet(in_channels=5 if a.turn_repeat > 0 else 4,
+                          channels=a.channels).to(device)
     (out / "config.json").write_text(json.dumps(
         {"args": vars(a), "ppo": asdict(cfg), "net": net.config}, indent=2, default=str))
 
@@ -56,7 +59,8 @@ def cmd_train(a) -> None:
         print(f"collecting {a.bc_lawns} demonstrations of '{a.bc_teacher}'...")
         demo_source = LawnSource(maps, p_random=source.p_random, random_size=tuple(a.size),
                                  symmetries=source.symmetries, seed=a.seed + 1)
-        demos = collect_demos(demo_source, a.bc_lawns, a.bc_teacher, source.max_shape)
+        demos = collect_demos(demo_source, a.bc_lawns, a.bc_teacher, source.max_shape,
+                              turn_memory=net.config["in_channels"] == 5)
         behaviour_cloning(net, demos, epochs=a.bc_epochs, device=device)
         save_checkpoint(out / "agent_bc.pt", net, 0, {"bc_teacher": a.bc_teacher})
     if a.steps > start:
@@ -146,6 +150,11 @@ def main(argv=None) -> None:
     t.add_argument("--turn-penalty", type=float, default=0.05,
                    help="penalty per 45 degrees turned (a step costs 0.1, so 0.05 makes "
                         "a 90-degree turn cost as much as one step)")
+    t.add_argument("--turn-repeat", type=float, default=0.0,
+                   help="penalty per 45 degrees for a turn right after another; the surcharge "
+                        "over --turn-penalty fades by --turn-decay per step (0 = off; >0 adds "
+                        "a 5th observation channel)")
+    t.add_argument("--turn-decay", type=float, default=0.01)
     t.add_argument("--max-steps-factor", type=float, default=4.0)
     t.add_argument("--channels", type=int, default=32)
     t.add_argument("--bc-teacher", choices=PLANNERS, help="behaviour cloning before PPO")

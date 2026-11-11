@@ -119,11 +119,14 @@ On an open rectangle both boustrophedon and STC are exact (no revisit).
 * **observation** `(4, H, W)` float planes — obstacles, mowed, mower, cell
   ahead (heading) — or an egocentric `(4, 2r+1, 2r+1)` window with
   `view_radius=r`, which lets one policy work across maps of any size;
+  `turn_memory=True` adds a 5th plane, the steps since the last turn (see
+  below);
 * **action** `Discrete(8)`; illegal moves leave the mower in place and are
   penalised; `env.action_masks()` / `info["action_mask"]` give the legal ones
   (works with sb3-contrib `MaskablePPO`);
 * **reward** `+1` per new cell, `−0.1` per step, `−0.05` per 45° turned,
-  `−1` per illegal move, `+10` on completion — all set via `Rewards(...)`;
+  `−1` per illegal move, `+10` on completion — all set via `Rewards(...)`,
+  which can also make consecutive turns cost more (`turn_repeat`, `turn_decay`);
 * pass several lawns and/or `random_start=True` to train for generalisation;
 * `env.result()` scores the episode with the same metrics as the planners, and
   `path_to_actions(planner_path)` turns any planner into expert
@@ -166,7 +169,7 @@ python -m lawnmower compare maps/maze2.txt -p stc agent mcts
 `CoverageNet` (`lawnmower/learn/net.py`) is fully convolutional:
 
 ```
-observation (4, H, W)  obstacles · mowed · mower · cell ahead
+observation (4, H, W)  obstacles · mowed · mower · cell ahead  (+ steps since last turn)
   └─ 3×3 conv → 5 residual blocks (3×3 convs, dilations 1, 2, 4, 8, 16)
        → features (C, H, W): one vector per cell, full resolution
          ├─ policy: features of the mower's 3×3 neighbourhood (9·C) → MLP → 8 logits
@@ -230,6 +233,86 @@ With `p = 0.05` the agent turns less than every planner and still wastes fewer
 steps than all of them. The discount factor matters too: with γ = 0.995 a
 reward 200 steps away counts for about a third, so on large lawns a higher γ
 helps the agent value distant unmowed patches.
+
+### Penalising consecutive turns, and why the agent then needs a 5th channel
+
+Even with `p = 0.05`, the agent often snakes: it zigzags, or mows short
+stripes whose ends are U-turns, i.e. two turns one step apart. Turns that
+come close together are what makes a path look like that, so they can be made
+to cost more. A turn made `x` steps after the previous one costs, per 45°,
+
+    max(p₀, p_max − d·x),    here p₀ = 0.05, p_max = 0.1, d = 0.01
+
+A turn right after another costs almost double, and the surcharge fades over
+5 steps, so an isolated turn keeps its usual price. A U-turn at the end of a
+pass (90°, one step, 90°) now costs 0.1 + 0.18 = 0.28 instead of 0.2, i.e.
+2.8 steps instead of 2, and a zigzag that turns at every step costs almost
+twice as much as before. Long passes, with few U-turns, become more
+attractive.
+
+```bash
+python -m lawnmower.learn train ... --turn-penalty 0.05 --turn-repeat 0.1 --turn-decay 0.01
+```
+
+**This reward needs a change to the observation.** PPO, like the other
+methods built on value functions, assumes the problem is a *Markov decision
+process*: the observation must contain everything that determines what
+happens next, including the reward. The original 4 channels show the heading
+(the cell ahead), but not *how long ago* the mower last turned. With the new
+penalty, two identical observations can lead to different rewards for the
+same move: turning now costs 0.09 if the last turn was one step ago, 0.05 if
+it was ten steps ago. The value head then has to predict an average over
+situations it cannot tell apart; its errors become noise in the advantages,
+and learning gets slower and less stable. The policy also cannot plan around
+a cost it cannot see.
+
+The fix is to put the missing information back into the state: with
+`--turn-repeat > 0`, the environment adds a **5th channel** holding, at the
+mower's cell, the number of steps since its last turn (`min(x, 10) / 10`).
+The network reads its number of input channels from the checkpoint, so older
+4-channel models keep working. The same rule applies to any reward you
+invent: if it depends on something, the agent must be able to observe it.
+
+**Result.** The model `models/agent_turns.pt` was trained exactly like
+`models/agent_small.pt`: same maps, symmetries and curriculum, same 1.25M
+steps, but with `--turn-repeat 0.1`. Both models are run best-of-16 on the
+example maps and best-of-8 on 60 unseen random gardens of size 8–14. Each
+cell gives steps / turns / mean straight run (`mean_run` = steps per straight
+run, now reported by `python -m lawnmower run`):
+
+| map      |   N | `agent_small` | `agent_turns`  |
+|----------|----:|---------------|----------------|
+| maze3    |  43 | 42 / 14 / 2.8 | 42 / 12 / 3.2  |
+| maze4    |  42 | 42 / 13 / 3.0 | 41 / 19 / 2.0  |
+| maze7a   |  25 | 25 / 9 / 2.5  | 25 / 8 / 2.8   |
+| maze0    | 262 | 269 / 64 / 4.1 | 270 / 51 / 5.2 |
+| maze2    | 404 | 435 / 90 / 4.8 | 437 / 81 / 5.3 |
+| maze6    | 438 | 465 / 105 / 4.4 | 473 / 112 / 4.2 |
+| maze8    | 406 | 425 / 97 / 4.3 | 438 / 105 / 4.1 |
+| test_map | 347 | 406 / 187 / 2.2 | 439 / 181 / 2.4 |
+| maze1    | 426 | 513 / 119 / 4.3 | 458 / 101 / 4.5 |
+| 60 random gardens | | overhead 1.046, 35.2 turns/100 cells, run 2.94 | overhead 1.054, 34.1 turns/100 cells, run 3.01 |
+
+(maze5, maze7 and maze7b: identical paths.) Summed over the six large maps,
+the new model makes 631 turns instead of 662 (−5%) for the same number of
+steps (2515 vs 2513). On the unseen gardens it makes 3% fewer turns for
+0.8% more steps. Training for the full 1.5M steps gives about the same
+result. So the agent is **slightly straighter, at almost no cost, but it
+still snakes**. It is also less consistent: it wins clearly on maze0 and
+maze1, and loses on maze8 and test_map.
+
+The reason is a lesson in itself: compared with what is at stake, the
+penalty is small. A U-turn now costs 0.8 step more, but the agent mostly
+snakes because it does not plan far enough ahead to see where long passes
+would fit. The reward says *what* is better, not *how* to find it.
+Boustrophedon, which plans the passes explicitly, still has the longest
+runs on most large maps (5–6 steps), but needs 1–9% more steps than
+`agent_turns`. Pushing `--turn-repeat` higher
+trades steps for straightness; a weight that overrides the step cost would
+make the agent prefer a longer path just to turn less.
+
+`agent_small.pt` stays the default model. To try the new one:
+`python -m lawnmower run -p agent --model models/agent_turns.pt maps/maze0.txt`.
 
 ### Generalising, or specialising on one map
 

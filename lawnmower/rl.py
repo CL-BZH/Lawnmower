@@ -16,6 +16,9 @@ Observation
     1. already mowed
     2. mower position
     3. the cell straight ahead of the mower (encodes its heading spatially)
+    4. only with ``turn_memory=True``: at the mower's cell, the number of steps
+       since its last turn, ``min(x, 10) / 10``.  Needed when the reward
+       depends on it (``Rewards.turn_repeat``), see below.
 
 Action
     ``Discrete(8)``: index into :data:`lawnmower.grid.DIRECTIONS`
@@ -28,6 +31,15 @@ Reward (all configurable through :class:`Rewards`)
     ``+new_cell`` when the mower reaches an unmowed cell, ``step`` every
     step, ``turn`` per 45 degrees of heading change, ``invalid`` for an
     illegal move, ``complete`` once everything reachable is mowed.
+
+    Consecutive turns can cost more: a turn made ``x`` steps after the
+    previous one costs, per 45 degrees,
+        max(-turn, -turn_repeat - turn_decay * x)
+    so with ``turn=-0.05, turn_repeat=-0.1, turn_decay=0.01`` a turn right
+    after another costs almost double, and the surcharge fades over 5 steps.
+    That reward depends on how long ago the mower last turned, which is not
+    visible in channels 0-3, so use ``turn_memory=True`` with it: a reward
+    that depends on hidden state breaks the Markov property.
 
 With ``obs_size=(H, W)`` the full view is padded to that size, so lawns
 passed later through ``reset(options={"lawn": ...})`` fit the same shape.
@@ -54,6 +66,9 @@ from .grid import DIRECTIONS, Cell, Lawn
 from .sim import Result, evaluate, heading_of, turn_between
 
 
+NO_TURN_YET = 1_000_000  # "steps since the last turn" before the first turn
+
+
 @dataclass(frozen=True)
 class Rewards:
     new_cell: float = 1.0
@@ -61,6 +76,12 @@ class Rewards:
     turn: float = -0.05      # per 45 degrees
     invalid: float = -1.0
     complete: float = 10.0
+    turn_repeat: float = 0.0  # per 45 degrees, for a turn right after another
+    turn_decay: float = 0.01  # the surcharge fades by this much per step
+
+    def turn_cost(self, steps_since_turn: float) -> float:
+        """Reward per 45 degrees for a turn made that many steps after the last one."""
+        return -max(-self.turn, -self.turn_repeat - self.turn_decay * steps_since_turn)
 
 
 class LawnmowerEnv(gym.Env):
@@ -75,6 +96,7 @@ class LawnmowerEnv(gym.Env):
         random_start: bool = False,
         render_mode: str | None = None,
         obs_size: tuple[int, int] | None = None,
+        turn_memory: bool = False,
     ) -> None:
         super().__init__()
         self.lawns = [lawns] if isinstance(lawns, Lawn) else list(lawns)
@@ -85,16 +107,18 @@ class LawnmowerEnv(gym.Env):
         self.view_radius = view_radius
         self.random_start = random_start
         self.render_mode = render_mode
+        self.turn_memory = turn_memory
+        self.n_channels = 5 if turn_memory else 4
 
         if view_radius is None:
             # pad every lawn to a common size so the observation shape is fixed
             # (obs_size lets lawns passed later through reset(options=...) fit too)
             self._H, self._W = obs_size or (max(lw.shape[0] for lw in self.lawns),
                                             max(lw.shape[1] for lw in self.lawns))
-            shape = (4, self._H, self._W)
+            shape = (self.n_channels, self._H, self._W)
         else:
             side = 2 * view_radius + 1
-            shape = (4, side, side)
+            shape = (self.n_channels, side, side)
         self.observation_space = spaces.Box(0.0, 1.0, shape=shape, dtype=np.float32)
         self.action_space = spaces.Discrete(len(DIRECTIONS))
 
@@ -103,6 +127,7 @@ class LawnmowerEnv(gym.Env):
         self.heading: int | None = None
         self.path: list[Cell] = []
         self.steps = 0
+        self.since_turn = NO_TURN_YET
         self._mowed: np.ndarray = np.zeros(self.lawn.shape, dtype=bool)
         self._todo = 0
 
@@ -124,6 +149,7 @@ class LawnmowerEnv(gym.Env):
         self.lawn = lawn
         self.pos = lawn.start
         self.heading = None
+        self.since_turn = NO_TURN_YET
         self.path = [lawn.start]
         self.steps = 0
         self._reach = np.zeros(lawn.shape, dtype=bool)
@@ -143,8 +169,11 @@ class LawnmowerEnv(gym.Env):
         reward = rw.step
         self.steps += 1
         if self.lawn.can_move(self.pos, nxt):
-            if self.heading is not None:
-                reward += rw.turn * turn_between(self.heading, a)
+            if self.heading is not None and a != self.heading:
+                reward += rw.turn_cost(self.since_turn) * turn_between(self.heading, a)
+                self.since_turn = 1
+            else:
+                self.since_turn += 1
             self.heading = a
             self.pos = nxt
             self.path.append(nxt)
@@ -173,7 +202,7 @@ class LawnmowerEnv(gym.Env):
     # ------------------------------------------------------------ internals
     def _planes(self) -> np.ndarray:
         h, w = self.lawn.shape
-        planes = np.zeros((4, h, w), dtype=np.float32)
+        planes = np.zeros((self.n_channels, h, w), dtype=np.float32)
         planes[0] = ~self._reach
         planes[1] = self._mowed
         planes[2][self.pos] = 1.0
@@ -182,6 +211,8 @@ class LawnmowerEnv(gym.Env):
             ahead = (self.pos[0] + dr, self.pos[1] + dc)
             if self.lawn.in_bounds(ahead):
                 planes[3][ahead] = 1.0
+        if self.turn_memory:
+            planes[4][self.pos] = min(self.since_turn, 10) / 10
         return planes
 
     def _obs(self) -> np.ndarray:
@@ -193,7 +224,7 @@ class LawnmowerEnv(gym.Env):
             out[:, :h, :w] = planes
             return out
         rad = self.view_radius
-        padded = np.zeros((4, planes.shape[1] + 2 * rad, planes.shape[2] + 2 * rad),
+        padded = np.zeros((self.n_channels, planes.shape[1] + 2 * rad, planes.shape[2] + 2 * rad),
                           dtype=np.float32)
         padded[0] = 1.0
         padded[:, rad:-rad or None, rad:-rad or None] = planes

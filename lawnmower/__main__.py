@@ -16,7 +16,7 @@ from pathlib import Path
 from . import PLANNERS, Lawn, plan
 from .sim import Result
 
-COLUMNS = ["coverage_%", "steps", "length", "turns", "revisits", "overhead"]
+COLUMNS = ["coverage_%", "steps", "length", "turns", "mean_run", "revisits", "overhead"]
 LEARNED = ("agent", "mcts")
 DEFAULT_MODEL = Path(__file__).resolve().parent.parent / "models" / "agent_small.pt"
 _models: dict = {}

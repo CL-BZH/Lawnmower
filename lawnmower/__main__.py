@@ -3,17 +3,41 @@
     python -m lawnmower run maps/maze6.txt -p stc --plot stc.png
     python -m lawnmower run maps/maze6.txt -p greedy --gif greedy.gif
     python -m lawnmower compare maps/maze6.txt maps/maze8.txt --plot cmp.png
+    python -m lawnmower run maps/maze7.txt -p agent --gif agent.gif   # needs torch
 """
 from __future__ import annotations
 
 import argparse
 import sys
+import time
 from pathlib import Path
 
 from . import PLANNERS, Lawn, plan
 from .sim import Result
 
 COLUMNS = ["coverage_%", "steps", "length", "turns", "revisits", "overhead"]
+DEFAULT_MODEL = Path(__file__).resolve().parent.parent / "models" / "agent_small.pt"
+_models: dict = {}
+
+
+def _solve(lawn: Lawn, planner: str, args) -> Result:
+    """Run a planner, or the trained agent when ``planner == "agent"``."""
+    if planner != "agent":
+        opts = {"seed": args.seed} if planner == "random" else {}
+        if getattr(args, "turn_weight", 0) and planner in ("boustrophedon", "stc"):
+            opts["turn_weight"] = args.turn_weight
+        return plan(lawn, planner, **opts)
+    try:
+        from .learn.ppo import load_checkpoint, run_policy
+    except ImportError:
+        sys.exit("the agent needs PyTorch: pip install -e '.[train]'")
+    if args.model not in _models:
+        _models[args.model] = load_checkpoint(args.model)[0]
+    t0 = time.perf_counter()
+    res = run_policy(_models[args.model], lawn, greedy=args.samples <= 1,
+                     samples=args.samples, seed=args.seed)
+    res.runtime_s = time.perf_counter() - t0
+    return res
 
 
 def _start(text: str | None):
@@ -47,10 +71,7 @@ def _describe(lawn: Lawn) -> str:
 def cmd_run(args) -> None:
     lawn = Lawn.from_file(args.map, start=args.start)
     print(_describe(lawn))
-    opts = {"seed": args.seed} if args.planner == "random" else {}
-    if args.turn_weight and args.planner in ("boustrophedon", "stc"):
-        opts["turn_weight"] = args.turn_weight
-    res = plan(lawn, args.planner, **opts)
+    res = _solve(lawn, args.planner, args)
     print(_table([(lawn.name, args.planner, res)]))
     if args.ascii:
         marks = {c: "." for c in res.visits if res.visits[c] == 1}
@@ -83,7 +104,7 @@ def cmd_compare(args) -> None:
     for map_file in args.maps:
         lawn = Lawn.from_file(map_file, start=args.start)
         print(_describe(lawn), file=sys.stderr)
-        results = [plan(lawn, p) for p in planners]
+        results = [_solve(lawn, p, args) for p in planners]
         rows += [(lawn.name, p, r) for p, r in zip(planners, results)]
         if args.plot:
             import matplotlib
@@ -104,9 +125,9 @@ def main(argv: list[str] | None = None) -> None:
 
     run = sub.add_parser("run", help="plan one map with one planner")
     run.add_argument("map")
-    run.add_argument("-p", "--planner", default="stc", choices=sorted(PLANNERS))
+    run.add_argument("-p", "--planner", default="stc", choices=[*sorted(PLANNERS), "agent"])
     run.add_argument("--start", type=_start, help="start cell ROW,COL (default: 'S' or first lawn cell)")
-    run.add_argument("--seed", type=int, default=0, help="seed for the random planner")
+    run.add_argument("--seed", type=int, default=0, help="seed for the random planner and the agent")
     run.add_argument("--turn-weight", type=float, default=0.0,
                      help="cost of a turn in steps when choosing between candidate plans")
     run.add_argument("--plot", help="save a figure (png/pdf/svg)")
@@ -118,10 +139,19 @@ def main(argv: list[str] | None = None) -> None:
 
     cmp_ = sub.add_parser("compare", help="compare planners on one or more maps")
     cmp_.add_argument("maps", nargs="+")
-    cmp_.add_argument("-p", "--planners", nargs="+", choices=sorted(PLANNERS))
+    cmp_.add_argument("-p", "--planners", nargs="+", choices=[*sorted(PLANNERS), "agent"],
+                      help="default: all planners (add 'agent' for the trained agent)")
     cmp_.add_argument("--start", type=_start)
+    cmp_.add_argument("--seed", type=int, default=0)
     cmp_.add_argument("--plot", help="save a side-by-side figure (one per map)")
     cmp_.set_defaults(func=cmd_compare)
+
+    for p in (run, cmp_):
+        p.add_argument("--model", default=str(DEFAULT_MODEL),
+                       help="-p agent: checkpoint of the trained agent")
+        p.add_argument("--samples", type=int, default=16,
+                       help="-p agent: sample N episodes and keep the shortest "
+                            "(1 = always play the most likely move)")
 
     args = ap.parse_args(argv)
     args.func(args)

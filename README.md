@@ -145,6 +145,10 @@ python -m lawnmower.learn train --out runs/small --size 8 14 --p-random 0.7 \
     --maps maps/maze3.txt maps/maze4.txt maps/maze5.txt maps/maze7.txt maps/maze7a.txt maps/maze7b.txt \
     --bc-teacher greedy --steps 1500000
 python -m lawnmower.learn eval models/agent_small.pt maps/maze7.txt --random 100 --size 8 14 --samples 16
+
+# run the agent like a planner (default model: models/agent_small.pt, best of 16 episodes)
+python -m lawnmower run maps/maze7.txt -p agent --gif agent.gif
+python -m lawnmower compare maps/maze2.txt -p stc agent
 ```
 
 ### Results: small lawns (`models/agent_small.pt`)

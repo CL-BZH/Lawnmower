@@ -204,5 +204,8 @@ def test_agent_pipeline_smoke(tmp_path):
     net, ck = load_checkpoint(tmp_path / "agent_final.pt")
     assert ck["step"] == 1024
     res = run_policy(net, rect(3, 4), greedy=False, samples=2)
+    from lawnmower.__main__ import main as cli
+    cli(["run", str(MAPS[0]), "-p", "agent", "--model", str(tmp_path / "agent_final.pt"),
+         "--samples", "1"])
     assert res.path[0] == (1, 1)
     assert (tmp_path / "training_log.csv").exists()

@@ -4,6 +4,7 @@
     python -m lawnmower run maps/maze6.txt -p greedy --gif greedy.gif
     python -m lawnmower compare maps/maze6.txt maps/maze8.txt --plot cmp.png
     python -m lawnmower run maps/maze7.txt -p agent --gif agent.gif   # needs torch
+    python -m lawnmower run maps/maze0.txt -p mcts --simulations 64   # needs torch
 """
 from __future__ import annotations
 
@@ -16,26 +17,33 @@ from . import PLANNERS, Lawn, plan
 from .sim import Result
 
 COLUMNS = ["coverage_%", "steps", "length", "turns", "revisits", "overhead"]
+LEARNED = ("agent", "mcts")
 DEFAULT_MODEL = Path(__file__).resolve().parent.parent / "models" / "agent_small.pt"
 _models: dict = {}
 
 
 def _solve(lawn: Lawn, planner: str, args) -> Result:
-    """Run a planner, or the trained agent when ``planner == "agent"``."""
-    if planner != "agent":
+    """Run a planner, the trained agent (``"agent"``) or the agent with MCTS (``"mcts"``)."""
+    if planner not in LEARNED:
         opts = {"seed": args.seed} if planner == "random" else {}
         if getattr(args, "turn_weight", 0) and planner in ("boustrophedon", "stc"):
             opts["turn_weight"] = args.turn_weight
         return plan(lawn, planner, **opts)
     try:
+        from .learn.mcts import mcts_mow, search_settings
         from .learn.ppo import load_checkpoint, run_policy
     except ImportError:
-        sys.exit("the agent needs PyTorch: pip install -e '.[train]'")
+        sys.exit(f"'{planner}' needs PyTorch: pip install -e '.[train]'")
     if args.model not in _models:
-        _models[args.model] = load_checkpoint(args.model)[0]
+        _models[args.model] = load_checkpoint(args.model)
+    net, ck = _models[args.model]
     t0 = time.perf_counter()
-    res = run_policy(_models[args.model], lawn, greedy=args.samples <= 1,
-                     samples=args.samples, seed=args.seed)
+    if planner == "mcts":
+        res = mcts_mow(net, lawn, simulations=args.simulations, c_puct=args.c_puct,
+                       backup=args.backup, **search_settings(ck))
+    else:
+        res = run_policy(net, lawn, greedy=args.samples <= 1,
+                         samples=args.samples, seed=args.seed)
     res.runtime_s = time.perf_counter() - t0
     return res
 
@@ -125,7 +133,7 @@ def main(argv: list[str] | None = None) -> None:
 
     run = sub.add_parser("run", help="plan one map with one planner")
     run.add_argument("map")
-    run.add_argument("-p", "--planner", default="stc", choices=[*sorted(PLANNERS), "agent"])
+    run.add_argument("-p", "--planner", default="stc", choices=[*sorted(PLANNERS), *LEARNED])
     run.add_argument("--start", type=_start, help="start cell ROW,COL (default: 'S' or first lawn cell)")
     run.add_argument("--seed", type=int, default=0, help="seed for the random planner and the agent")
     run.add_argument("--turn-weight", type=float, default=0.0,
@@ -139,8 +147,8 @@ def main(argv: list[str] | None = None) -> None:
 
     cmp_ = sub.add_parser("compare", help="compare planners on one or more maps")
     cmp_.add_argument("maps", nargs="+")
-    cmp_.add_argument("-p", "--planners", nargs="+", choices=[*sorted(PLANNERS), "agent"],
-                      help="default: all planners (add 'agent' for the trained agent)")
+    cmp_.add_argument("-p", "--planners", nargs="+", choices=[*sorted(PLANNERS), *LEARNED],
+                      help="default: all planners (add 'agent' or 'mcts' for the trained agent)")
     cmp_.add_argument("--start", type=_start)
     cmp_.add_argument("--seed", type=int, default=0)
     cmp_.add_argument("--plot", help="save a side-by-side figure (one per map)")
@@ -148,10 +156,16 @@ def main(argv: list[str] | None = None) -> None:
 
     for p in (run, cmp_):
         p.add_argument("--model", default=str(DEFAULT_MODEL),
-                       help="-p agent: checkpoint of the trained agent")
+                       help="-p agent/mcts: checkpoint of the trained agent")
         p.add_argument("--samples", type=int, default=16,
                        help="-p agent: sample N episodes and keep the shortest "
                             "(1 = always play the most likely move)")
+        p.add_argument("--simulations", type=int, default=64,
+                       help="-p mcts: simulations per move")
+        p.add_argument("--c-puct", type=float, default=1.25,
+                       help="-p mcts: exploration constant")
+        p.add_argument("--backup", choices=("mean", "max"), default="mean",
+                       help="-p mcts: value a move by the mean or the best return found")
 
     args = ap.parse_args(argv)
     args.func(args)

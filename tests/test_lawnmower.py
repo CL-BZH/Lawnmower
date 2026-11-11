@@ -209,3 +209,39 @@ def test_agent_pipeline_smoke(tmp_path):
          "--samples", "1"])
     assert res.path[0] == (1, 1)
     assert (tmp_path / "training_log.csv").exists()
+
+
+def test_symmetries_preserve_the_problem():
+    from lawnmower.lawngen import transform_lawn
+
+    lawn = Lawn.from_file(MAPS[0])
+    seen = set()
+    for k in range(4):
+        for flip in (False, True):
+            t = transform_lawn(lawn, k, flip)
+            assert len(t.reachable) == len(lawn.reachable) and t.is_free(t.start)
+            seen.add(t.free.tobytes() + bytes(t.start))
+    assert len(seen) == 8
+
+
+def test_curriculum_grows_random_gardens():
+    from lawnmower.learn.ppo import LawnSource
+
+    src = LawnSource(random_size=(8, 20), curriculum=0.5)
+    assert src.current_size == (8, 8)
+    src.progress = 0.25
+    assert src.current_size == (8, 14)
+    src.progress = 1.0
+    assert src.current_size == (8, 20)
+
+
+def test_mcts_mows_a_small_lawn():
+    torch = pytest.importorskip("torch")
+    from lawnmower.learn.mcts import mcts_mow
+    from lawnmower.learn.net import CoverageNet
+
+    torch.manual_seed(0)
+    lawn = rect(3, 4)
+    for backup in ("mean", "max"):
+        res = mcts_mow(CoverageNet(channels=8), lawn, simulations=32, backup=backup)
+        assert res.metrics.complete  # evaluate() has also checked every move

@@ -27,7 +27,7 @@ import torch.nn.functional as F
 
 from .. import plan
 from ..grid import Lawn
-from ..lawngen import random_lawn
+from ..lawngen import random_lawn, transform_lawn
 from ..rl import LawnmowerEnv, Rewards, path_to_actions
 from ..sim import Result, evaluate
 from .net import CoverageNet
@@ -37,27 +37,47 @@ from .net import CoverageNet
 class LawnSource:
     """Draws the lawn of each new episode.
 
-    ``maps``: example lawns (drawn with probability ``1 - p_random``, with a
-    random start if ``random_start``); ``p_random``: probability of a random
+    ``maps``: example lawns, drawn with probability ``1 - p_random``, with a
+    random start if ``random_start``.  ``p_random``: probability of a random
     garden of outer size in ``random_size``.
+
+    ``symmetries``: rotate/mirror every lawn by one of the 8 symmetries of the
+    square, drawn at random, so each map gives 8 training lawns.
+    ``curriculum``: the random gardens start small and reach their full size
+    after this fraction of the training (0 = full size from the start); the
+    trainer reports its progress through :attr:`progress`.
     """
 
     def __init__(self, maps: Sequence[Lawn] = (), p_random: float = 1.0,
                  random_size: tuple[int, int] = (8, 32), random_start: bool = True,
-                 seed: int = 0):
+                 symmetries: bool = True, curriculum: float = 0.0, seed: int = 0):
         if not maps and p_random < 1:
             p_random = 1.0
         self.maps = list(maps)
         self.p_random = p_random
         self.random_size = random_size
         self.random_start = random_start
+        self.symmetries = symmetries
+        self.curriculum = curriculum
+        self.progress = 0.0
         self.rng = np.random.default_rng(seed)
 
     @property
     def max_shape(self) -> tuple[int, int]:
-        h = max([self.random_size[1] if self.p_random > 0 else 0] + [m.shape[0] for m in self.maps])
-        w = max([self.random_size[1] if self.p_random > 0 else 0] + [m.shape[1] for m in self.maps])
-        return h, w
+        """Observation size that fits every lawn this source can draw."""
+        shapes = [m.shape for m in self.maps]
+        if self.p_random > 0:
+            shapes.append((self.random_size[1], self.random_size[1]))
+        h, w = max(s[0] for s in shapes), max(s[1] for s in shapes)
+        return (max(h, w), max(h, w)) if self.symmetries else (h, w)
+
+    @property
+    def current_size(self) -> tuple[int, int]:
+        lo, hi = self.random_size
+        if self.curriculum <= 0:
+            return lo, hi
+        frac = min(1.0, self.progress / self.curriculum)
+        return lo, max(lo, round(lo + frac * (hi - lo)))
 
     def __call__(self) -> Lawn:
         if self.maps and self.rng.random() >= self.p_random:
@@ -65,8 +85,11 @@ class LawnSource:
             if self.random_start:
                 cells = sorted(lawn.reachable)
                 lawn = lawn.with_start(cells[int(self.rng.integers(len(cells)))])
-            return lawn
-        return random_lawn(self.rng, *self.random_size)
+        else:
+            lawn = random_lawn(self.rng, *self.current_size)
+        if self.symmetries:
+            lawn = transform_lawn(lawn, int(self.rng.integers(4)), bool(self.rng.integers(2)))
+        return lawn
 
 
 # ---------------------------------------------------------------- vector env
@@ -130,7 +153,7 @@ class PPOConfig:
     max_grad_norm: float = 0.5
     reward_scale: float = 0.1
     max_steps_factor: float = 4.0
-    rewards: Rewards = field(default_factory=lambda: Rewards(turn=-0.01))
+    rewards: Rewards = field(default_factory=Rewards)
     save_every: int = 250_000
     seed: int = 0
 
@@ -238,6 +261,7 @@ def train_ppo(net: CoverageNet, source: LawnSource, cfg: PPOConfig, out_dir: str
     n_updates = math.ceil((cfg.total_steps - start_step) / (n * T))
     for update in range(n_updates):
         frac = 1 - update / max(n_updates, 1)
+        source.progress = (step - start_step) / max(cfg.total_steps - start_step, 1)
         for g in opt.param_groups:
             g["lr"] = cfg.lr * frac
         net.eval()

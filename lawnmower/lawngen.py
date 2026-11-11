@@ -69,3 +69,20 @@ def _largest_component(free: np.ndarray) -> np.ndarray:
     if not sizes:
         return free
     return label == int(np.argmax(sizes))
+
+
+def transform_lawn(lawn: Lawn, k: int, flip: bool) -> Lawn:
+    """Rotate ``lawn`` by ``k`` quarter turns, then mirror it if ``flip``.
+
+    The 8 combinations are the symmetries of the square (the dihedral group
+    D4).  A mowing problem and its transformed copy are equally hard, so they
+    are free extra training lawns.
+    """
+    free = lawn.free
+    marker = np.zeros(free.shape, dtype=bool)
+    marker[lawn.start] = True
+    free, marker = np.rot90(free, k), np.rot90(marker, k)
+    if flip:
+        free, marker = np.fliplr(free), np.fliplr(marker)
+    r, c = np.argwhere(marker)[0]
+    return Lawn(np.ascontiguousarray(free), (int(r), int(c)), lawn.name)

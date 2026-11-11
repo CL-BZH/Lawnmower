@@ -55,6 +55,25 @@ agents) are always scored by the same rules:
 | `revisits` | moves landing on an already-mowed cell |
 | `overhead` | `steps / (N − 1)`; 1.0 means no cell was visited twice |
 
+### Lower bound and true optimum
+
+With N cells to mow, the mower starts on one of them and each move reaches at
+most one new cell, so **every complete path needs at least N − 1 moves**. A
+path reaches this bound exactly when it never revisits a cell: it is then a
+Hamiltonian path of the move graph starting at the start cell.
+
+The true optimum is the shortest walk visiting every cell. Finding it
+generalises the Hamiltonian path problem, which is NP-complete already on grid
+graphs (Itai, Papadimitriou & Szwarcfiter, 1982), so it is not computed here.
+`overhead` is therefore measured against the bound:
+
+* a path with `overhead` 1.0 is **provably optimal**;
+* above 1.0, part of the gap may be unavoidable — a dead-end corridor one cell
+  wide, for instance, forces the mower to come back over cells it has mowed.
+
+The bound ignores turns: two paths with the same number of steps can differ
+a lot in how straight they are.
+
 ## Planners
 
 | name | idea |
@@ -124,64 +143,191 @@ No learning library is a dependency; plug in your own DQN / PPO / A2C.
 
 ## Learned agent
 
-`lawnmower/learn/` trains an agent for this environment with PPO:
-
-* **Network**: fully convolutional, so the same network runs on lawns of any
-  size. Residual 3×3 convolutions with growing dilations keep full
-  resolution while seeing the whole lawn. The policy reads the features of
-  the 8 cells the mower can move to, and illegal moves are masked out.
-* **Training**: behaviour cloning of a planner, then masked PPO. Episodes
-  use random gardens (`lawnmower/lawngen.py`) and the example maps, with
-  random start cells, so the agent has to generalise rather than memorise
-  one path.
-* **Evaluation**: the agent's path goes through the same `evaluate` as the
-  planners. `agent` plays its most likely move; `agent_best_of_N` samples N
-  episodes and keeps the shortest (the planners also keep the best of
-  several candidates).
+`lawnmower/learn/` trains an agent for this environment: behaviour cloning of
+a planner, then PPO with action masking. Its paths go through the same
+`evaluate` as the planners.
 
 ```bash
 pip install -e '.[train]'
 python -m lawnmower.learn train --out runs/small --size 8 14 --p-random 0.7 \
     --maps maps/maze3.txt maps/maze4.txt maps/maze5.txt maps/maze7.txt maps/maze7a.txt maps/maze7b.txt \
-    --bc-teacher greedy --steps 1500000
-python -m lawnmower.learn eval models/agent_small.pt maps/maze7.txt --random 100 --size 8 14 --samples 16
+    --bc-teacher greedy --steps 1500000 --curriculum 0.3
+python -m lawnmower.learn eval models/agent_small.pt maps/maze7.txt --random 100 --size 8 14 \
+    --samples 16 --mcts 64
 
-# run the agent like a planner (default model: models/agent_small.pt, best of 16 episodes)
-python -m lawnmower run maps/maze7.txt -p agent --gif agent.gif
-python -m lawnmower compare maps/maze2.txt -p stc agent
+# run the agent like a planner (default model: models/agent_small.pt)
+python -m lawnmower run maps/maze7.txt -p agent --gif agent.gif    # best of 16 sampled episodes
+python -m lawnmower run maps/maze0.txt -p mcts --simulations 64    # MCTS guided by the network
+python -m lawnmower compare maps/maze2.txt -p stc agent mcts
 ```
 
-### Results: small lawns (`models/agent_small.pt`)
+### Network
 
-Trained for 1.5M PPO steps on CPU (about 1.5 h on 2 cores) after cloning the
-greedy planner. These are steps to mow everything from the map's usual start;
-N − 1 is the minimum possible:
+`CoverageNet` (`lawnmower/learn/net.py`) is fully convolutional:
 
-| map (N) | greedy | boustrophedon | stc | agent | agent best of 16 |
+```
+observation (4, H, W)  obstacles · mowed · mower · cell ahead
+  └─ 3×3 conv → 5 residual blocks (3×3 convs, dilations 1, 2, 4, 8, 16)
+       → features (C, H, W): one vector per cell, full resolution
+         ├─ policy: features of the mower's 3×3 neighbourhood (9·C) → MLP → 8 logits
+         │          illegal moves masked out
+         └─ value:  mower features ⊕ mean and max over lawn cells ⊕ cells left → MLP → V
+```
+
+* **Any lawn size.** A convolution applies the same small kernel at every
+  cell, so its weights do not depend on H × W. What usually ties a CNN to one
+  input size is a final `Flatten → Linear`; here both heads read fixed-size
+  summaries instead: the 3×3 patch around the mower for the policy, and
+  pooling over the lawn for the value. The same network therefore runs on a
+  9×9 lawn and on a 31×31 one. During training, lawns are padded to a common
+  size only so that they can be batched; the padding is marked as obstacle.
+* **Seeing far.** The policy only reads the mower's neighbourhood, so the
+  features there must encode what lies further away (an unmowed patch behind
+  a wall). The dilated convolutions provide this cheaply: the receptive field
+  reaches 1 + (2 + 3 + 5 + 9 + 17) = 37 cells in every direction with 5 blocks.
+  There is no stride or pooling in the trunk, because the exact position of the
+  mower and of every unmowed cell matters.
+* **Able to run is not trained to run.** An agent trained on lawns of at most
+  14×14 never had to cross 25 cells to reach unmowed grass, and on 31×31 maps
+  it can end up going round in circles. Large lawns need training on large
+  lawns.
+
+### How the rewards shape the path
+
+The agent maximises its (discounted) return, so the rewards define what a
+"good" path is:
+
+| event | reward | role |
+|---|---:|---|
+| reach an unmowed cell | +1 | the goal |
+| any step | −0.1 | makes revisits cost: a wasted step is −0.1 |
+| turning, per 45° | −`turn_penalty` | trades steps against straighter passes |
+| finishing the lawn | +10 | makes the last isolated cells worth fetching |
+
+Since a step costs 0.1, a turn penalty `p` per 45° makes a 90° turn cost as
+much as `2p / 0.1` steps. With `p = 0.01`, a U-turn costs less than half a
+step, and the agent happily snakes through the lawn in short, irregular
+stripes to save a single step. With `p = 0.05` (now the default), a 90° turn
+costs one step, and the agent prefers longer straight passes for a few extra
+steps. Same training otherwise (best of 16 sampled episodes, steps/turns):
+
+| map | greedy | boustrophedon | stc | agent, p = 0.01 | agent, p = 0.05 |
+|---|---|---|---|---|---|
+| maze3 | 45/17 | 48/23 | 44/20 | 42/19 | 42/12 |
+| maze4 | 45/17 | 44/21 | 43/19 | 41/18 | 41/14 |
+| maze7 | 52/11 | 55/23 | 54/35 | 50/14 | 52/11 |
+| maze7a | 27/13 | 26/15 | 26/15 | 24/18 | 25/8 |
+| maze0 | 283/69 | 282/52 | 273/125 | 266/78 | 268/74 |
+
+On 60 unseen gardens (8–14), mean overhead and turns per 100 cells:
+
+| | greedy | boustrophedon | stc | agent, p = 0.01 | agent, p = 0.05 |
 |---|---:|---:|---:|---:|---:|
-| maze3 (43) | 45 | 48 | 44 | **42** | **42** |
-| maze4 (42) | 45 | 44 | 43 | **41** | **41** |
-| maze5 (9) | **8** | **8** | **8** | **8** | **8** |
-| maze7 (51) | 52 | 55 | 54 | **50** | **50** |
-| maze7a (25) | 27 | 26 | 26 | 25 | **24** |
-| maze7b (26) | **25** | **25** | 26 | **25** | **25** |
+| overhead | 1.115 | 1.108 | 1.089 | **1.037** | 1.054 |
+| turns / 100 cells | 37.5 | 36.4 | 53.1 | 41.2 | **35.7** |
 
-The agent reaches the minimum N − 1 on every one of these maps. They were in
-its training set, though always with random starts.
+With `p = 0.05` the agent turns less than every planner and still wastes fewer
+steps than all of them. The discount factor matters too: with γ = 0.995 a
+reward 200 steps away counts for about a third, so on large lawns a higher γ
+helps the agent value distant unmowed patches.
 
-On **100 random gardens it never saw** (outer size 8–14), the mean overhead is
-(1.0 = optimal):
+### Generalising, or specialising on one map
 
-| greedy | boustrophedon | stc | agent | agent best of 16 |
-|---:|---:|---:|---:|---:|
-| 1.119 | 1.110 | 1.092 | 1.060 (completes 99%) | **1.035** (completes 100%) |
+* **To generalise**, the agent must see the variety it will meet: sizes,
+  distances, corridors, open areas. Every episode is therefore a new lawn,
+  either a random garden (`lawnmower/lawngen.py`, an unlimited supply) or an
+  example map, with a random start cell. Two cheap additions:
+  * *symmetries* (on by default, `--no-symmetries` to disable): every lawn is
+    rotated or mirrored at random, by one of the 8 symmetries of the square.
+    Mowing a lawn and mowing its mirror image are the same problem, so each map
+    counts as 8.
+  * *curriculum* (`--curriculum 0.3`): random gardens start at the smallest
+    size and reach the largest after 30% of the training.
+* **To be as good as possible on one map**, fine-tune the general agent on
+  that map instead of training from scratch. It already knows how to cover a
+  lawn and only has to adapt. Keep random starts, so that it learns a policy
+  for the whole map rather than memorising one path:
 
-The agent beats the best planner, but only at this scale. On the 30×30 maps it
-was never trained on, sampling still finds shorter paths than STC on maze0
-(266 vs 273) and maze2 (404 cells: 418 vs 427). On maze6 and maze8, however,
-its most likely move can cycle and it stops at 91–95% coverage. Large lawns
-need training on large lawns: `tools/train_kaggle.ipynb` does that on a GPU,
-and can then fine-tune on a single map.
+  ```bash
+  python -m lawnmower.learn train --out runs/ft_maze8 --maps maps/maze8.txt --p-random 0 \
+      --resume runs/general/agent_final.pt --steps 3000000 --lr 1e-4
+  ```
+
+  (`FINETUNE_MAP` in the Kaggle notebook does the same.) For the single best
+  path from one fixed start, searching with the network (below) is usually a
+  better use of compute than more training.
+
+### Search: single-player MCTS
+
+`-p mcts` chooses every move with a Monte Carlo Tree Search guided by the
+network (AlphaZero-style). Each simulation descends the tree with the PUCT
+rule, Q + c·P·√N / (1 + n); expands one new state with one network evaluation
+(policy priors, value estimate, no random roll-out); and backs up
+G = r + γ·G. The most visited move is played and its subtree is kept.
+
+Mowing is a one-player "game", unlike Pacman or Hex, and that changes a few
+things (`lawnmower/learn/mcts.py`):
+
+* there is no opponent, so no alternation of maximising and minimising
+  players: every node maximises the same return;
+* returns are not bounded in [−1, 1] (they grow with the lawn), so Q is
+  rescaled to [0, 1] with the extreme values seen in the tree, as in MuZero;
+* the environment is deterministic: replaying the same moves gives the same
+  state, so the tree is exact and can be reused after each move, and a move
+  can be valued by the *best* return found below it (`--backup max`) instead
+  of the mean. The mean is more robust to errors in the value head; the max
+  is more aggressive.
+
+With the small agent, MCTS (64 simulations, mean backups) mostly matches the
+best of 16 sampled episodes on the lawns it knows, and is hit-or-miss on the
+large ones (table below): it finds the shortest path of all on maze6 but
+fails to finish maze1 and test_map. Max backups did worse than the mean, for
+example 284 vs 277 steps on maze0 with an earlier model. A search is only as
+good as its value estimates, and the small agent's value head has never seen
+a lawn larger than 14×14. MCTS should pay off with a network trained on large
+lawns.
+
+### Results (`models/agent_small.pt`)
+
+Trained on CPU (2 cores, about 2 h): behaviour cloning of `greedy` on 500
+lawns, then 1.25M PPO steps on random gardens of 8–14 cells and the small
+example maps, with random starts, random symmetries, a curriculum, and turn
+penalty 0.05. maze3 to maze7b were part of the training (from random starts);
+the larger maps were not. Each cell shows steps/turns, with the fewest steps
+in bold; N − 1 is the minimum number of steps:
+
+| map (N) | greedy | boustrophedon | stc | agent (best of 16) | mcts (64) |
+|---|---|---|---|---|---|
+| maze3 (43) | 45/17 | 48/23 | 44/20 | **42**/14 | **42**/16 |
+| maze4 (42) | 45/17 | 44/21 | 43/19 | **42**/13 | 43/15 |
+| maze5 (9) | **8**/4 | **8**/4 | **8**/5 | **8**/4 | **8**/4 |
+| maze7 (51) | **52**/11 | 55/23 | 54/35 | **52**/11 | **52**/11 |
+| maze7a (25) | 27/13 | 26/15 | 26/15 | **25**/9 | **25**/9 |
+| maze7b (26) | **25**/9 | **25**/12 | 26/16 | **25**/9 | **25**/9 |
+| maze0 (262) | 283/69 | 282/52 | 273/125 | 269/64 | **268**/66 |
+| maze2 (404) | 457/133 | 443/71 | **427**/182 | 435/90 | 431/86 |
+| maze1 (426) | **485**/146 | 500/84 | 496/205 | 513/119 | 1704/1563 (38%) |
+| maze6 (438) | 501/148 | 495/85 | 494/204 | 465/105 | **458**/96 |
+| maze8 (406) | 465/127 | 464/79 | **420**/180 | 425/97 | 459/98 |
+| test_map (347) | 440/173 | 442/167 | 478/283 | **406**/187 | 1388/668 (99%) |
+
+On 60 random gardens it never saw (8–14):
+
+| | greedy | boustrophedon | stc | agent (best of 8) |
+|---|---:|---:|---:|---:|
+| overhead | 1.115 | 1.108 | 1.089 | **1.046** |
+| turns / 100 cells | 37.5 | 36.4 | 53.1 | **35.2** |
+
+On unseen gardens of the size it was trained on, the agent wastes fewer steps
+than every planner *and* turns less. Outside the training sizes, on maps of
+21×21 to 31×31 it has never seen, it finishes every lawn when sampled. The
+agent or its MCTS gives the fewest steps on maze0, maze6 and test_map. It comes within 5 steps of STC
+on maze8, with half the turns, but is worse than all three planners on maze1.
+The same training without symmetries and the curriculum also finishes these
+maps, but in more steps: 566 vs 465 on maze6, 434 vs 425 on maze8. So the
+augmentation helps generalisation. Training on large lawns is the next step:
+`tools/train_kaggle.ipynb` does it on a GPU, and can then fine-tune on a single
+map.
 
 ## Layout
 
@@ -192,7 +338,7 @@ lawnmower/
   planners/        baselines.py (random, greedy), boustrophedon.py, stc.py
   rl.py            Gymnasium environment (optional)
   lawngen.py       random gardens for training
-  learn/           network, PPO + behaviour cloning, train/eval CLI (needs torch)
+  learn/           network, PPO + behaviour cloning, MCTS, train/eval CLI (needs torch)
   viz.py           figures and GIF animations
   __main__.py      command line interface
 maps/              example lawns

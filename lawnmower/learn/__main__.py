@@ -19,6 +19,7 @@ import torch
 
 from .. import Lawn, plan
 from ..rl import Rewards
+from .mcts import mcts_mow, search_settings
 from .net import CoverageNet
 from .ppo import (LawnSource, PPOConfig, behaviour_cloning, collect_demos, get_device,
                   load_checkpoint, run_policy, save_checkpoint, train_ppo)
@@ -34,7 +35,8 @@ def cmd_train(a) -> None:
         torch.set_num_threads(a.threads)
     maps = [Lawn.from_file(m) for m in a.maps]
     source = LawnSource(maps, p_random=a.p_random if maps else 1.0,
-                        random_size=tuple(a.size), seed=a.seed)
+                        random_size=tuple(a.size), symmetries=not a.no_symmetries,
+                        curriculum=a.curriculum, seed=a.seed)
     cfg = PPOConfig(total_steps=a.steps, n_envs=a.envs, n_steps=a.n_steps, lr=a.lr,
                     gamma=a.gamma, ent_coef=a.ent_coef, seed=a.seed,
                     save_every=a.save_every, max_steps_factor=a.max_steps_factor,
@@ -53,7 +55,7 @@ def cmd_train(a) -> None:
     if a.bc_teacher and not a.resume:
         print(f"collecting {a.bc_lawns} demonstrations of '{a.bc_teacher}'...")
         demo_source = LawnSource(maps, p_random=source.p_random, random_size=tuple(a.size),
-                                 seed=a.seed + 1)
+                                 symmetries=source.symmetries, seed=a.seed + 1)
         demos = collect_demos(demo_source, a.bc_lawns, a.bc_teacher, source.max_shape)
         behaviour_cloning(net, demos, epochs=a.bc_epochs, device=device)
         save_checkpoint(out / "agent_bc.pt", net, 0, {"bc_teacher": a.bc_teacher})
@@ -63,7 +65,8 @@ def cmd_train(a) -> None:
         save_checkpoint(out / "agent_final.pt", net, start)
 
 
-def compare(net: CoverageNet, lawns: list[Lawn], samples: int = 0, seed: int = 0) -> list[dict]:
+def compare(net: CoverageNet, lawns: list[Lawn], samples: int = 0, seed: int = 0,
+            mcts: int = 0, settings: dict | None = None) -> list[dict]:
     rows = []
     for lawn in lawns:
         row = {"map": lawn.name, "cells": len(lawn.reachable)}
@@ -73,6 +76,8 @@ def compare(net: CoverageNet, lawns: list[Lawn], samples: int = 0, seed: int = 0
         if samples:
             row[f"agent_best_of_{samples}"] = run_policy(
                 net, lawn, greedy=False, samples=samples, seed=seed).metrics
+        if mcts:
+            row[f"mcts_{mcts}"] = mcts_mow(net, lawn, simulations=mcts, **(settings or {})).metrics
         rows.append(row)
     return rows
 
@@ -85,7 +90,8 @@ def format_table(rows: list[dict]) -> str:
         cells = [row["map"], str(row["cells"])]
         for k in keys:
             m = row[k]
-            cells.append(f"{m.steps}" if m.complete else f"{m.steps} ({100 * m.coverage:.0f}%)")
+            cell = f"{m.steps}/{m.turns}"
+            cells.append(cell if m.complete else f"{cell} ({100 * m.coverage:.0f}%)")
         lines.append(cells)
     widths = [max(len(x) for x in col) for col in zip(head, *lines)]
     fmt = lambda cs: "  ".join(c.rjust(w) for c, w in zip(cs, widths))  # noqa: E731
@@ -98,17 +104,20 @@ def cmd_eval(a) -> None:
     if a.random:
         src = LawnSource(random_size=tuple(a.size), seed=10_000 + a.seed)
         lawns += [src() for _ in range(a.random)]
-    rows = compare(net, lawns, samples=a.samples, seed=a.seed)
-    print(f"checkpoint {a.checkpoint} (step {ck.get('step')}) — steps to mow everything "
+    rows = compare(net, lawns, samples=a.samples, seed=a.seed, mcts=a.mcts,
+                   settings=search_settings(ck))
+    print(f"checkpoint {a.checkpoint} (step {ck.get('step')}) — steps/turns to mow everything "
           f"(coverage in brackets when incomplete)")
     print(format_table(rows))
     if a.random:
         keys = [k for k in rows[0] if k not in ("map", "cells")]
-        print("\nmean overhead on complete runs / completion rate over all lawns:")
+        print("\nover all lawns: mean overhead and turns per 100 cells on complete runs, "
+              "completion rate")
         for k in keys:
             ms = [r[k] for r in rows]
             done = [m for m in ms if m.complete]
             print(f"  {k:18s} {np.mean([m.overhead for m in done]):.3f}  "
+                  f"{np.mean([100 * m.turns / m.target for m in done]):5.1f}  "
                   f"{100 * len(done) / len(ms):.0f}%")
 
 
@@ -123,13 +132,20 @@ def main(argv=None) -> None:
                    help="share of episodes on random gardens when --maps is given")
     t.add_argument("--size", type=int, nargs=2, default=(8, 32),
                    help="outer size range of random gardens")
+    t.add_argument("--no-symmetries", action="store_true",
+                   help="do not rotate/mirror the lawns (8 symmetries of the square)")
+    t.add_argument("--curriculum", type=float, default=0.0,
+                   help="random gardens grow from the smallest to the largest size over "
+                        "this fraction of the training (0 = off)")
     t.add_argument("--steps", type=int, default=2_000_000, help="PPO environment steps")
     t.add_argument("--envs", type=int, default=32)
     t.add_argument("--n-steps", type=int, default=128, help="steps per env between updates")
     t.add_argument("--lr", type=float, default=3e-4)
     t.add_argument("--gamma", type=float, default=0.995)
     t.add_argument("--ent-coef", type=float, default=0.01)
-    t.add_argument("--turn-penalty", type=float, default=0.01, help="reward per 45 degrees")
+    t.add_argument("--turn-penalty", type=float, default=0.05,
+                   help="penalty per 45 degrees turned (a step costs 0.1, so 0.05 makes "
+                        "a 90-degree turn cost as much as one step)")
     t.add_argument("--max-steps-factor", type=float, default=4.0)
     t.add_argument("--channels", type=int, default=32)
     t.add_argument("--bc-teacher", choices=PLANNERS, help="behaviour cloning before PPO")
@@ -151,6 +167,8 @@ def main(argv=None) -> None:
     e.add_argument("--size", type=int, nargs=2, default=(8, 32))
     e.add_argument("--samples", type=int, default=0,
                    help="also report the best of N sampled episodes")
+    e.add_argument("--mcts", type=int, default=0,
+                   help="also report MCTS with N simulations per move")
     e.add_argument("--seed", type=int, default=0)
     e.add_argument("--device")
     e.set_defaults(func=cmd_eval)

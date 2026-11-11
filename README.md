@@ -197,5 +197,5 @@ tools/             Kaggle notebook for GPU training
 tests/             pytest suite (all planners on all maps, legality, RL env)
 ```
 
-The previous code (the turtle version and `lawnmower_optimizer/`) remains on
-the `master` branch.
+The previous code (the turtle version and `lawnmower_optimizer/`) is kept
+under the `legacy` tag: `git checkout legacy`.

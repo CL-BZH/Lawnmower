@@ -181,3 +181,28 @@ def test_env_invalid_move_and_mask():
     bad = int(np.flatnonzero(~mask)[0])
     _, r, *_ = env.step(bad)
     assert env.pos == (1, 1) and r < 0
+
+
+# ------------------------------------------------------------------- learning
+def test_random_lawns_are_connected():
+    from lawnmower.lawngen import random_lawn
+
+    rng = np.random.default_rng(0)
+    for _ in range(20):
+        lawn = random_lawn(rng, 8, 20)
+        assert lawn.reachable == lawn.lawn_cells and len(lawn.reachable) >= 9
+
+
+def test_agent_pipeline_smoke(tmp_path):
+    pytest.importorskip("torch")
+    from lawnmower.learn.__main__ import main as learn_main
+    from lawnmower.learn.ppo import load_checkpoint, run_policy
+
+    learn_main(["train", "--out", str(tmp_path), "--size", "6", "9", "--steps", "1024",
+                "--envs", "4", "--n-steps", "128", "--bc-teacher", "greedy",
+                "--bc-lawns", "5", "--bc-epochs", "1", "--channels", "8"])
+    net, ck = load_checkpoint(tmp_path / "agent_final.pt")
+    assert ck["step"] == 1024
+    res = run_policy(net, rect(3, 4), greedy=False, samples=2)
+    assert res.path[0] == (1, 1)
+    assert (tmp_path / "training_log.csv").exists()

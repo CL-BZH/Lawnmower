@@ -29,6 +29,9 @@ Reward (all configurable through :class:`Rewards`)
     step, ``turn`` per 45 degrees of heading change, ``invalid`` for an
     illegal move, ``complete`` once everything reachable is mowed.
 
+With ``obs_size=(H, W)`` the full view is padded to that size, so lawns
+passed later through ``reset(options={"lawn": ...})`` fit the same shape.
+
 Episodes end (``terminated``) at full coverage and are truncated after
 ``max_steps_factor * N`` steps, N being the number of reachable cells.
 """
@@ -71,6 +74,7 @@ class LawnmowerEnv(gym.Env):
         view_radius: int | None = None,
         random_start: bool = False,
         render_mode: str | None = None,
+        obs_size: tuple[int, int] | None = None,
     ) -> None:
         super().__init__()
         self.lawns = [lawns] if isinstance(lawns, Lawn) else list(lawns)
@@ -84,8 +88,9 @@ class LawnmowerEnv(gym.Env):
 
         if view_radius is None:
             # pad every lawn to a common size so the observation shape is fixed
-            self._H = max(lw.shape[0] for lw in self.lawns)
-            self._W = max(lw.shape[1] for lw in self.lawns)
+            # (obs_size lets lawns passed later through reset(options=...) fit too)
+            self._H, self._W = obs_size or (max(lw.shape[0] for lw in self.lawns),
+                                            max(lw.shape[1] for lw in self.lawns))
             shape = (4, self._H, self._W)
         else:
             side = 2 * view_radius + 1
@@ -114,6 +119,8 @@ class LawnmowerEnv(gym.Env):
         elif self.random_start:
             cells = sorted(lawn.reachable)
             lawn = lawn.with_start(cells[int(self.np_random.integers(len(cells)))])
+        if self.view_radius is None and (lawn.shape[0] > self._H or lawn.shape[1] > self._W):
+            raise ValueError(f"lawn {lawn.shape} larger than the observation {(self._H, self._W)}")
         self.lawn = lawn
         self.pos = lawn.start
         self.heading = None

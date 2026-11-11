@@ -122,6 +122,63 @@ obs, reward, terminated, truncated, info = env.step(env.action_space.sample())
 
 No learning library is a dependency; plug in your own DQN / PPO / A2C.
 
+## Learned agent
+
+`lawnmower/learn/` trains an agent for this environment with PPO:
+
+* **Network**: fully convolutional, so the same network runs on lawns of any
+  size. Residual 3×3 convolutions with growing dilations keep full
+  resolution while seeing the whole lawn. The policy reads the features of
+  the 8 cells the mower can move to, and illegal moves are masked out.
+* **Training**: behaviour cloning of a planner, then masked PPO. Episodes
+  use random gardens (`lawnmower/lawngen.py`) and the example maps, with
+  random start cells, so the agent has to generalise rather than memorise
+  one path.
+* **Evaluation**: the agent's path goes through the same `evaluate` as the
+  planners. `agent` plays its most likely move; `agent_best_of_N` samples N
+  episodes and keeps the shortest (the planners also keep the best of
+  several candidates).
+
+```bash
+pip install -e '.[train]'
+python -m lawnmower.learn train --out runs/small --size 8 14 --p-random 0.7 \
+    --maps maps/maze3.txt maps/maze4.txt maps/maze5.txt maps/maze7.txt maps/maze7a.txt maps/maze7b.txt \
+    --bc-teacher greedy --steps 1500000
+python -m lawnmower.learn eval models/agent_small.pt maps/maze7.txt --random 100 --size 8 14 --samples 16
+```
+
+### Results: small lawns (`models/agent_small.pt`)
+
+Trained for 1.5M PPO steps on CPU (about 1.5 h on 2 cores) after cloning the
+greedy planner. These are steps to mow everything from the map's usual start;
+N − 1 is the minimum possible:
+
+| map (N) | greedy | boustrophedon | stc | agent | agent best of 16 |
+|---|---:|---:|---:|---:|---:|
+| maze3 (43) | 45 | 48 | 44 | **42** | **42** |
+| maze4 (42) | 45 | 44 | 43 | **41** | **41** |
+| maze5 (9) | **8** | **8** | **8** | **8** | **8** |
+| maze7 (51) | 52 | 55 | 54 | **50** | **50** |
+| maze7a (25) | 27 | 26 | 26 | 25 | **24** |
+| maze7b (26) | **25** | **25** | 26 | **25** | **25** |
+
+The agent reaches the minimum N − 1 on every one of these maps. They were in
+its training set, though always with random starts.
+
+On **100 random gardens it never saw** (outer size 8–14), the mean overhead is
+(1.0 = optimal):
+
+| greedy | boustrophedon | stc | agent | agent best of 16 |
+|---:|---:|---:|---:|---:|
+| 1.119 | 1.110 | 1.092 | 1.060 (completes 99%) | **1.035** (completes 100%) |
+
+The agent beats the best planner, but only at this scale. On the 30×30 maps it
+was never trained on, sampling still finds shorter paths than STC on maze0
+(266 vs 273) and maze2 (404 cells: 418 vs 427). On maze6 and maze8, however,
+its most likely move can cycle and it stops at 91–95% coverage. Large lawns
+need training on large lawns: `tools/train_kaggle.ipynb` does that on a GPU,
+and can then fine-tune on a single map.
+
 ## Layout
 
 ```
@@ -130,9 +187,13 @@ lawnmower/
   sim.py           path validation and metrics (single source of truth)
   planners/        baselines.py (random, greedy), boustrophedon.py, stc.py
   rl.py            Gymnasium environment (optional)
+  lawngen.py       random gardens for training
+  learn/           network, PPO + behaviour cloning, train/eval CLI (needs torch)
   viz.py           figures and GIF animations
   __main__.py      command line interface
 maps/              example lawns
+models/            trained agent checkpoints
+tools/             Kaggle notebook for GPU training
 tests/             pytest suite (all planners on all maps, legality, RL env)
 ```
 

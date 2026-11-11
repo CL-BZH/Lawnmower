@@ -137,3 +137,8 @@ dmypy.json
 *.gif
 !docs/*.png
 !docs/*.gif
+
+# training outputs
+runs/
+*.pt
+!models/*.pt

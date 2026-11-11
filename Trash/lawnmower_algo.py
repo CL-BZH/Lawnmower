@@ -1,8 +1,10 @@
+from maze import Maze
 import time
 from timeit import default_timer as timer
 import random
 import math
 from queue import PriorityQueue
+from collections import defaultdict
 
 
 #
@@ -18,7 +20,7 @@ def drunkard_walk(x, y, heading, valid_xy, graph=None):
         yield (x, y)
 
 
-def random_walk(x, y, heading, valid_xy, graph=None):
+def random_walk(x, y, heading, valid_xy, maze=None):
     ''' 
     The difference with the drunkard walk is that we keep track of the cell
     already visited.
@@ -54,7 +56,7 @@ def random_walk(x, y, heading, valid_xy, graph=None):
             continue
         yield (x, y)
 
-def random_walk_with_policy(x, y, heading, valid_xy, graph=None):
+def random_walk_with_policy(x, y, heading, valid_xy, maze=None):
     ''' 
     The difference with the random walk is that we try to enforce a policy.
     '''
@@ -95,16 +97,16 @@ def random_walk_with_policy(x, y, heading, valid_xy, graph=None):
         heading = angles[(dx, dy)]
         yield (x, y)
 
-def mc_greedy_learning(start_x, start_y, heading, valid_xy, graph=None):
+def mc_greedy_learning(start_x, start_y, heading, valid_xy, maze=None):
     print(f"Number of cell to mow: {len(valid_xy)}")
-    epochs = 5*len(valid_xy)
+    epochs = len(valid_xy)/2
     paths = PriorityQueue()
     min_path_len = math.inf
     while epochs:
         print(f"epochs = {epochs}")
         visited = [(start_x, start_y)]
         path = []
-        for (x, y) in greedy_walk(start_x, start_y, heading, valid_xy, learn=True):
+        for (x, y) in greedy_walk(start_x, start_y, heading, valid_xy, None, learn=True):
             if (x, y) not in visited:
                 visited.append((x,y))
             path.append((x,y))
@@ -126,7 +128,7 @@ def mc_greedy_learning(start_x, start_y, heading, valid_xy, graph=None):
     for node in path:
         yield node
     
-def greedy_walk(x, y, heading, valid_xy, learn=False, graph=None):
+def greedy_walk(x, y, heading, valid_xy, maze=None, learn=False):
     ''' 
     The difference with the random walk is that we try to enforce a policy.
     '''
@@ -235,19 +237,20 @@ def greedy_walk(x, y, heading, valid_xy, learn=False, graph=None):
                 view_sum = mov_factors[1]
                 value = mov_factors[0]
                 
-                # if distance == 1 and view_sum == 1:
+                # if distance == 1 and len(sum_queen_view) <= 2 : #view_sum == 1:
                 #     #Stand alone cell. Select it in order to not leave it behind
                 #     best_mov = mov
                 #     view_sum_max = view_sum
                 #     print(f"Stand alone cell {(x + best_mov[0], y + best_mov[1])} selected")
                 #     break
                 
-                if distance < distance_min:
+                if distance < 2 * distance_min:
                     best_mov = mov
                     value_max = value
                     view_sum_max = view_sum
                     distance_min = distance
-                elif distance != math.inf and distance >= distance_min:
+
+                elif distance != math.inf:
                     # print(f"\t{mov} distance {distance} >= {distance_min} distance_min")
                     # print(f"\t{mov} value {value} vs {value_max}")
                     ratio = value/distance
@@ -256,7 +259,7 @@ def greedy_walk(x, y, heading, valid_xy, learn=False, graph=None):
                     if distance == distance_min:
                         factor = 1
                     if (ratio > factor * min_distance_ratio):
-                        print(f"ratio {ratio} > {3*min_distance_ratio} 3*min_distance_ratio")
+                        #print(f"ratio {ratio} > {3*min_distance_ratio} 3*min_distance_ratio")
                         best_mov = mov
                         value_max = value
                         view_sum_max = view_sum
@@ -286,20 +289,26 @@ def greedy_walk(x, y, heading, valid_xy, learn=False, graph=None):
             for target in valid_xy:
                 if target not in visited:
                     # Find the "closest" one (considering simply the euclidian distance)
-                    potential_target.put((((x-target[0])**2 + (y-target[1])**2), target))
+                    distance = (x-target[0])**2 + (y-target[1])**2
+                    potential_target.put((distance, target))
 
+            #print(potential_target.queue)
+            
             # Let's move to a target point
             astar_paths = []
             while not potential_target.empty():
-                target = potential_target.get()[1]
+                #target = potential_target.get()[1]
+                target = bfs((x,y), valid_xy, visited, offsets)
                 astar_path = a_star_algorithm((x,y), target, valid_xy, offsets)
                 if astar_path is None:
                     #print(f"astar_path is None for target {target}")
                     continue
                 paths.append(astar_path)
+                
                 if learn == False:
+                    #print(f"A* path: {paths}")
                     break
-                elif len(paths) > 40:
+                elif len(paths) > 10:
                     # We have to limit the search otherwise it takes too long
                     print("Enforce limitation on call to A*")
                     break
@@ -343,6 +352,36 @@ def get_nodes_neighbors(valid_nodes, offsets):
 
     return neighbors
 
+def bfs(start, valid_nodes, mowed, offsets):
+        # Create a queue for BFS
+        queue = []
+
+        # List visited nodes
+        visited = []
+        
+        # Mark the starting node as visited and enqueue it
+        queue.append(start)
+        visited.append(start)
+
+        neighbors = get_nodes_neighbors(valid_nodes, offsets)
+
+        node = None
+        
+        while queue:
+ 
+            # Dequeue a vertex from queue
+            vertex = queue.pop(0)
+ 
+            # Get all adjacent vertices of the dequeued vertex.
+            # If a adjacent has not been visited, then enqueue it and mark it visited
+            for node in neighbors[vertex]:
+                if node not in visited:
+                    queue.append(node)
+                    visited.append(node)
+                    if node not in mowed:
+                        return node
+
+    
 def a_star_algorithm(start, stop, valid_nodes, offsets):
     #print(f"Run A*")
     h = {node:(start[0] - node[0])**2 + (start[1] - node[1])**2 for node in valid_nodes}
@@ -371,7 +410,7 @@ def a_star_algorithm(start, stop, valid_nodes, offsets):
         # it will find a node with the lowest value of f() -
         for v in open_lst:
             if n == None or poo[v] + h[v] < poo[n] + h[n]:
-                n = v;
+                n = v
  
             if n == None:
                 #print('Path does not exist!')
@@ -496,13 +535,15 @@ def hamilton_path_util(path, graph, vertices, cycle=False):
     return []
 
     
-def hamilton_path(start_x, start_y, heading, valid_xy, graph):
+def hamilton_path(start_x, start_y, heading, valid_xy, maze):
 
+    graph = maze.getGraph()
+    
     start = timer()
     
     path = [(-start_y, start_x)]
     
-    if hamilton_path_util(path, graph, len(valid_xy), cycle=True) == []:
+    if hamilton_path_util(path, graph[0], len(valid_xy), cycle=False) == []:
         print ("Solution does not exist\n")
         return []
 
@@ -514,3 +555,99 @@ def hamilton_path(start_x, start_y, heading, valid_xy, graph):
     for (x, y) in path[1::]:
         #print(f"yield {(-y, x)}")
         yield (y, -x)
+
+
+def mst_path(start_x, start_y, heading, valid_xy, maze):
+    start = (-start_y, start_x)
+    g = maze.getGraph()
+    adjency_dict, adjency_mat, key = g
+    #print(f"Call mst with {start}")
+    mst = maze.getMST(g, [start])
+    parent, children = mst
+    #maze.drawGraph(g, (parent, children))
+
+    #print(key)
+    #print(f"start {start} is at index {key.index(start)} of key")
+    #print(f"start {start} is connected to {key[mst[index]]}")
+
+    def build_path(parent, children, adjency_mat, key, start, valid_xy):
+        offsets = [(0,1), (0,-1), (1,0), (1,1), (1,-1), (-1,0), (-1,1), (-1,-1),]
+        neighbors = get_nodes_neighbors(valid_xy, offsets)
+        index = key.index(start)
+        #print(f"index is {index}")
+        path = [start]
+        size = len(key)
+        visited = [start]
+        while len(visited) != len(valid_xy):
+            #pickup a child
+            node_children = children[index]
+            if node_children != []:
+                child = node_children.pop()
+                child_node = key[child]
+                path.append(child_node)
+                if child_node not in visited:
+                    visited.append(child_node)
+                index = child
+            else:
+                # The node is a leaf. Jump to the closest leaf not yet visited.
+                current_leaf = key[index]
+                dist = math.inf
+                next_node_idx = None
+                next_node = None
+                for v in range(size):
+                    child = children[v]
+                    if child == []:
+                        neighbor_leaf = key[v]
+                        neighbor_dist = [(i-j)**2 for i,j in zip(current_leaf, neighbor_leaf)]
+                        neighbor_dist = neighbor_dist[0] + neighbor_dist[1]
+                        #print(f"current_leaf {current_leaf} - neighbor_leaf {neighbor_leaf}")
+                        #print(f"distance: {neighbor_dist}")
+                        if neighbor_dist < dist and neighbor_leaf not in path:
+                            dist = neighbor_dist
+                            next_node_idx = v
+                            next_node = key[next_node_idx]
+
+                if not next_node:
+                    print(f"BUG next_node is None for current_leaf {current_leaf}")
+                    return path[1:]
+                
+                (r, c) = current_leaf
+                (x, y) = (c, -r)
+                (r, c) = next_node
+                (target_x, target_y) = (c, -r)
+                if (target_x, target_y) in neighbors[(x,y)]:
+                    path.append(next_node)
+                    if next_node not in visited:
+                        visited.append(next_node)
+                else:
+                    astar_path = a_star_algorithm((x,y), (target_x, target_y),
+                                                  valid_xy, offsets)
+                    print(f"Go from {current_leaf} to {next_node} with A* path {astar_path}")
+
+                    for (x,y) in astar_path[1:]:
+                        vertex = (-y, x)
+                        if vertex not in visited:
+                            visited.append(vertex)
+                        path.append(vertex)
+                        
+                index = key.index(path[-1])
+                index = parent[index]
+                next_node = key[index]
+                
+                while next_node not in path:
+                    path.append(next_node)
+                    if next_node not in visited:
+                        visited.append(next_node)
+                    index = parent[index]
+                    next_node = key[index]
+
+                index = key.index(path[-1])
+                #index = parent[index]
+                
+                print(f"path: {path}")
+                
+        return path[1:]    
+    
+    for vertex in build_path(parent, children, adjency_mat, key, start, valid_xy):
+        yield (vertex[1], -vertex[0])
+    

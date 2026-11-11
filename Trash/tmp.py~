@@ -1,0 +1,64 @@
+    # Modify the MST
+    offsets = [(0,1), (0,-1), (1,0), (1,1), (1,-1), (-1,0), (-1,1), (-1,-1),]
+    neighbors = get_nodes_neighbors(valid_xy, offsets)
+    print(neighbors)
+    size = len(key)
+
+    max_distance = 0
+    farest_leaf_index = key.index(start)
+    for u in range(size):
+        if children[u] == []:
+            u_dist = 0
+            v = parent[u]
+            # u is the index of a leaf
+            while v != key.index(start):
+                u_dist += 1
+                v = parent[v]
+            if u_dist > max_distance:
+                max_distance = u_dist
+                farest_leaf_index = u
+    farest_leaf = key[farest_leaf_index]
+    print(f"The farest leaf is {farest_leaf} at distance {max_distance}")
+    farest_leaf = (farest_leaf[1], -farest_leaf[0])
+    for _ in range(size):
+        for u in range(size):
+            if children[u] == []:
+                # u is a leaf
+                # if it is a neighbor of the farest leaf then connect them
+                leaf = key[u]
+                leaf_neighbors = neighbors[(leaf[1], -leaf[0])]
+                #print(f"leaf {leaf} has neighbors {leaf_neighbors}. farest_leaf is {farest_leaf}")
+
+                if farest_leaf in leaf_neighbors:
+                    children[farest_leaf_index] = u
+                    children[parent[u]].remove(u)
+                    parent[u] = farest_leaf_index
+                    farest_leaf_index = u
+                    farest_leaf = key[farest_leaf_index]
+                    farest_leaf = (farest_leaf[1], -farest_leaf[0])
+                    print(f"The farest leaf is {farest_leaf} at distance {max_distance+1}")
+                
+    # for u in range(size):
+    #     if children[u] == []:
+    #         # u is the index of a leaf
+    #         leaf = key[u]
+    #         leaf_neighbors = neighbors[(leaf[1], -leaf[0])]
+    #         leaf_neighbors = [(-leaf_neighbor[1],leaf_neighbor[0])
+    #                           for leaf_neighbor in leaf_neighbors]
+    #         print(f"{leaf} has neighbors: {leaf_neighbors}")
+    #         for leaf_neighbor in leaf_neighbors:
+    #             leaf_neighbor_index = key.index(leaf_neighbor)
+    #             if parent[leaf_neighbor_index] is not None: # start has no parent
+    #                 print(f"Parent of {leaf_neighbor} (idx:{leaf_neighbor_index}) "
+    #                       f"is {key[parent[leaf_neighbor_index]]} "
+    #                       f"(idx:{parent[leaf_neighbor_index]})")
+                
+    #             if (leaf_neighbor_index != parent[u] and
+    #                 parent[u] not in children[leaf_neighbor_index]):
+    #                 print(f"Parent of {leaf_neighbor} becomes {leaf}")
+    #                 parent[leaf_neighbor_index] = u
+            
+    start_index = key.index(start)
+
+    maze.drawGraph(g, (parent, children))
+    #maze.printMST(mst, adjency_mat, key, [start_index])

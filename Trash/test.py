@@ -5,6 +5,7 @@ from lawnmower_algo import random_walk_with_policy
 from lawnmower_algo import greedy_walk
 from lawnmower_algo import mc_greedy_learning
 from lawnmower_algo import hamilton_path
+from lawnmower_algo import mst_path
 
 # Instantiate the maze reading the maze's describtion file
 #maze = Maze('maze0.txt')
@@ -13,10 +14,10 @@ from lawnmower_algo import hamilton_path
 #maze = Maze('maze3.txt')
 #maze = Maze('maze4.txt')
 #maze = Maze('maze5.txt')
-#maze = Maze('maze6.txt')
-#maze = Maze('maze7.txt') #take 1h15min
-#maze = Maze('maze7a.txt') #take 0.02sec
-maze = Maze('maze7b.txt') #take 0.007sec
+maze = Maze('maze6.txt')
+#maze = Maze('maze7.txt') #take 1h15min with hamilton
+#maze = Maze('maze7a.txt') #take 0.02sec with hamilton
+#maze = Maze('maze7b.txt') #take 0.007sec with hamilton
 #maze = Maze('maze8.txt')
 
 # Draw the maze
@@ -34,7 +35,7 @@ maze.setStart(row=3, col=1, heading=0)
 
 
 # Set the turtle speed (between 1 and 10) (default to 3)
-maze.setSpeed(1)
+maze.setSpeed(2)
 
 # Start mowing the lawn
 #maze.run(drunkard_walk)
@@ -42,9 +43,12 @@ maze.setSpeed(1)
 #maze.run(greedy_walk)
 #maze.run(mc_greedy_learning)
 maze.run(hamilton_path)
+#maze.run(mst_path)
 
 # You enter the move
 #maze.run()
+
+#maze.getMST()
 
 # Draw the graph of the maze
 #maze.drawGraph()

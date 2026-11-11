@@ -195,8 +195,8 @@ class Maze:
                     vertices.append((row, col))
                     vertices_colors.append(color)
         # Get all neighbor nodes
-        adjency = {}
-        #adjency_matrix = np.zeros((vertices, vertices))
+        adjency_dict = {}
+
         for vertex, color in zip(vertices, vertices_colors):
             directions = self.getDirections(*vertex)
             neighbors = []
@@ -220,33 +220,135 @@ class Maze:
                         if directions['E'] not in vertices or directions['S'] not in vertices:
                             continue
                     neighbors.append((neighbor, weight))
-            adjency[vertex] = (color, neighbors)
-        #print(adjency)
-        neighbors = {neighbor[0]:neighbor[1:][0][1] for neighbor in adjency.items()}
+            adjency_dict[vertex] = (color, neighbors)
+        #print(adjency_dict)
+        neighbors = {neighbor[0]:neighbor[1:][0][1] for neighbor in adjency_dict.items()}
+        #print(neighbors)
         keys = sorted(neighbors.keys())
+        #print(keys)
         size = len(keys)
-        M = [ [0]*size for i in range(size) ]
-        for a,b,w in [(keys.index(a), keys.index(b), w) for (a, row) in neighbors.items() for b,w in row]:
+        adjency_mat = [ [0]*size for i in range(size) ]
+        for a,b,w in [(keys.index(a), keys.index(b), w) for (a, tmp) in neighbors.items() for b,w in tmp]:
             #print(f"a={a}, b={b}")
-            M[a][b] = 0 if (a==b) else w
-        ts = size**2 * 2**size * 10**-9 * 10**-9
-        tmin = ts / 60
-        th = tmin /60
-        print(f"There is {size} vertices. This may take about {ts} seconds ({tmin} minutes => {th} hours)")
-        return adjency
+            adjency_mat[a][b] = 0 if (a==b) else w
 
-    def drawGraph(self, g=None):
+        return adjency_dict, adjency_mat, keys
+
+    def getMST(self, g=None, start=None):
         if not g:
             g = self.getGraph()
+        adjency_dict, adjency_mat, ordered_vertices = g
+
+        start_index = 0
+        if start:
+            start_index = ordered_vertices.index(start[0])
+            
+        size = len(ordered_vertices)
+        key = [math.inf] * size
+        parent = [None] * size  # Array to store constructed MST
+        children = [[]] * size
+        key[start_index] = 0 # To be picked first
+        mstSet = [False] * size
+        def minKey(key, size, mstSet):
+            # Initialize min value
+            min = math.inf
+            min_index = 0
+            
+            for vertex_idx in range(size):
+                if key[vertex_idx] < min and mstSet[vertex_idx] == False:
+                    min = key[vertex_idx]
+                    min_index = vertex_idx
+ 
+            return min_index
+ 
+        for _ in range(size):
+ 
+            # Pick the minimum distance vertex from
+            # the set of vertices not yet processed.
+            # u is always equal to src in first iteration
+            u = minKey(key, size, mstSet)
+ 
+            # Put the minimum distance vertex in
+            # the shortest path tree
+            mstSet[u] = True
+ 
+            # Update dist value of the adjacent vertices
+            # of the picked vertex only if the current
+            # distance is greater than new distance and
+            # the vertex in not in the shortest path tree
+            for v in range(size):
+                adjency_mat_u_v = adjency_mat[u][v]
+                # Update the key only if adjency_mat[u][v] is smaller than key[v]
+                if adjency_mat_u_v > 0 and mstSet[v] == False and key[v] > adjency_mat_u_v:
+                    key[v] = adjency_mat_u_v
+                    parent[v] = u
+
+        for v in range(size):
+            for u in range(size):
+                if parent[v] == u:
+                    # v is a child of u
+                    if children[u] == []:
+                        children[u] = [v]
+                    else:
+                        children[u].append(v)
+
+        print(children)
+        return parent, children
+
+    def printMST(self, mst, adjency_mat, key, start_index=None):
+        size = len(key)
+        if not start_index:
+            start_index = [0]
+
+        parent = mst[0]
+        print("Parent - Child \tWeight")
+        for i in range(size):
+            if i == start_index[0]:
+                parent_vertex = '*'
+                w = 'inf'
+            else:
+                parent_vertex = key[parent[i]]
+                w = adjency_mat[i][parent[i]]
+            print(f"{parent_vertex} - {key[i]}\t{w}")
+
+        children = mst[1]
+        for i in range(size):
+            child_vertices = [key[child] for child in children[i]]
+            print(f"{key[i]} -> {child_vertices}")
+
+            
+    def drawGraph(self, g=None, tree=None):
+        if not g:
+            g = self.getGraph()
+        adjency_dict, adjency_mat, key = g
+
+        start = (self.startRow, self.startCol)
+
+        if not tree:
+            parent, children = self.getMST(g, [start])
+        else:
+            parent, children = tree
+            
+        start_index = key.index(start)
+        size = len(key)
+        tree = []
+        for i in range(size):
+            if i == start_index:
+                continue
+            else:
+                parent_vertex = key[parent[i]]
+                #w = adjency_mat[i][parent[i]]
+            tree.append((key[i], parent_vertex))
+            
         path = self.path.values()
         traces = []
-        for vertex in g:
+        for vertex in adjency_dict:
             vx = vertex[1]
             vy = vertex[0]
             annotation = ''
             #v = go.Scatter(x = vx, y = vy, mode = 'markers', name = vertex)
-            color = g[vertex][0]
-            edges_and_weights = g[vertex][1:][0]
+            color = adjency_dict[vertex][0]
+            edges_and_weights = adjency_dict[vertex][1:][0]
             #print(f"edges_and_weights: {edges_and_weights}")
             edges = [v for v, w in edges_and_weights]
             #print(f"edges: {edges}")
@@ -256,7 +358,7 @@ class Maze:
                     Y = [vy]
                     x = edge[1]
                     y = edge[0]
-                    edge_color = g[edge][0]
+                    edge_color = adjency_dict[edge][0]
                     if ((edge_color == colors[DEAD_END]) or
                         (color == colors[DEAD_END])):
                         edge_color = colors[DEAD_END]
@@ -264,7 +366,10 @@ class Maze:
                           ((edge, vertex) in path)):
                         edge_color = colors[PART_OF_PATH]
                     else:
-                        edge_color =  colors[NOT_VISITED]
+                        edge_color = colors[NOT_VISITED]
+                        if (vertex, edge) in tree or (edge, vertex) in tree:
+                            edge_color = 'blue'
+                            
                     X.append(x)
                     Y.append(y)
                     # Plot the edges
@@ -402,10 +507,10 @@ class Maze:
         else:
             self.mow(*self.current_pos)
             # Run the algo
-            for x, y in searchFunction(self.current_pos[1],-self.current_pos[0],
-                                       round(self.t.heading()), self.lawn, self.getGraph()):
+            for x, y in searchFunction(self.current_pos[1], -self.current_pos[0],
+                                       round(self.t.heading()), self.lawn, self):
                 if (x, y) == (math.inf, 0):
-                    # this is the code return by the algo to say there is not path to some unmowed lawn
+                    # this is the code return by the algo to say there is no path to some unmowed lawn
                     print(f"Cannot access unmowed lawn")
                     efficiency = self.efficiency[-1]
                     print(f"Global efficiency: {100*efficiency[0]/efficiency[1]}%")

@@ -58,8 +58,8 @@ cell is swept, to minimise that travel, is a **generalised travelling
 salesman problem**: each "city" (cell) comes in 4 versions (entry/exit
 pairs), and exactly one version of each city must be visited.
 
-With $K$ cells, an exact solution (dynamic programming over subsets) costs
-about $2^K K^2$ operations, too much beyond a dozen cells. The code uses two
+With $`K`$ cells, an exact solution (dynamic programming over subsets) costs
+about $`2^K K^2`$ operations, too much beyond a dozen cells. The code uses two
 heuristics and keeps the better result:
 
 * **Nearest first.** Repeatedly sweep the unmowed cell whose entry corner is
@@ -71,8 +71,8 @@ heuristics and keeps the better result:
   starting from its exit. The best candidate is kept, and the process is
   repeated. This look-ahead, a classic idea from approximate dynamic
   programming (Bertsekas), avoids the dead ends of plain nearest first. It
-  costs about $O(K^4)$ distance look-ups ($K$ decisions, $4K$ candidates
-  each, and a nearest-first completion of $O(K^2)$ for each), so it is
+  costs about $`O(K^4)`$ distance look-ups ($`K`$ decisions, $`4K`$ candidates
+  each, and a nearest-first completion of $`O(K^2)`$ for each), so it is
   used up to 30 cells.
 
 All travel costs are exact grid distances, from one BFS per corner.

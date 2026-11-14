@@ -12,17 +12,17 @@ lawn of any size**, and what that does and does not guarantee.
 
 ## Convolutions do not care about the size
 
-A 3×3 convolution computes, at every cell $(i, j)$ and for every output
-channel $c'$,
+A 3×3 convolution computes, at every cell $`(i, j)`$ and for every output
+channel $`c'`$,
 
 ```math
 y_{c'}(i, j) = b_{c'} + \sum_{c} \sum_{u, v \in \{-1, 0, 1\}} W_{c', c, u, v}\; x_c(i + d\,u,\; j + d\,v),
 ```
 
-where $d$ is the dilation (1 for an ordinary convolution). The weights $W$
+where $`d`$ is the dilation (1 for an ordinary convolution). The weights $`W`$
 form a small fixed array, 3 × 3 × (input channels) × (output channels),
 **shared by every cell**: the same kernel slides over the whole grid. Nothing
-in $W$ depends on the height $H$ or the width $W$ of the lawn. A bigger lawn
+in $`W`$ depends on the height $`H`$ or the width $`W`$ of the lawn. A bigger lawn
 means more positions to slide over, not more weights. The output keeps the
 size of the input (zero padding at the borders, no stride, no pooling), so
 after the trunk every cell has its own vector of 32 features.
@@ -37,7 +37,7 @@ what is around the mower, not to where the mower is.
 ## What would tie a network to one size
 
 Most image classifiers end with a `Flatten → Linear` layer: the whole
-feature map, $C \cdot H \cdot W$ numbers, is multiplied by a weight matrix.
+feature map, $`C \cdot H \cdot W`$ numbers, is multiplied by a weight matrix.
 That matrix has one column per input number, so its shape *is* the input
 size. For our 32 channels and a hidden layer of 128:
 
@@ -77,9 +77,9 @@ features there must summarise what lies further away: an unmowed strip
 behind a wall, a dead end ahead. The **receptive field** of a feature is the
 set of input cells that can influence it.
 
-Each 3×3 convolution with dilation $d$ extends the receptive field by $d$
+Each 3×3 convolution with dilation $`d`$ extends the receptive field by $`d`$
 cells in every direction. A residual block has one dilated convolution and
-one ordinary one, so with $r_k$ the radius after block $k$:
+one ordinary one, so with $`r_k`$ the radius after block $`k`$:
 
 ```math
 r_0 = 1 \;(\text{stem}), \qquad r_k = r_{k-1} + d_k + 1 .
@@ -94,7 +94,7 @@ cases: a dilated kernel still has 9 taps, just spread out.
 
 A dilated convolution alone sees a sparse grid of cells, and stacking them
 carelessly leaves holes (*gridding*). Here, before the block with dilation
-$d$, the receptive field already has a width $2r + 1 \ge d$, so the three
+$`d`$, the receptive field already has a width $`2r + 1 \ge d`$, so the three
 spread-out taps overlap and the field stays a full square. The figure script
 checks this by propagating the actual kernel offsets
 ([`tools/make_figures.py`](../tools/make_figures.py), `receptive_radii`).

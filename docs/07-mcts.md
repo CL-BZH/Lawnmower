@@ -11,11 +11,11 @@ important way: **there is no opponent**.
 
 ## The search tree
 
-The nodes are states, the edges are moves. Each edge $(s, a)$ stores
+The nodes are states, the edges are moves. Each edge $`(s, a)`$ stores
 
-* $P(s, a)$, the **prior**: the probability the policy head gives to $a$;
-* $N(s, a)$, the number of simulations that went through it;
-* $Q(s, a)$, the return observed after it (the mean, or the best, of the
+* $`P(s, a)`$, the **prior**: the probability the policy head gives to $`a`$;
+* $`N(s, a)`$, the number of simulations that went through it;
+* $`Q(s, a)`$, the return observed after it (the mean, or the best, of the
   returns backed up through it);
 * the reward of the move.
 
@@ -34,24 +34,24 @@ a^* = \arg\max_a \; \hat Q(s, a) + c\; P(s, a)\, \frac{\sqrt{N(s) + 1}}{1 + N(s,
 \qquad c = 1.25,
 ```
 
-where $N(s)$ is the total number of visits of the node. The first term is
+where $`N(s)`$ is the total number of visits of the node. The first term is
 **exploitation**: moves that gave good returns. The second is
-**exploration**: a bonus for moves the policy finds promising (large $P$)
-but that have been tried little (small $N(s, a)$). The bonus shrinks as a
+**exploration**: a bonus for moves the policy finds promising (large $`P`$)
+but that have been tried little (small $`N(s, a)`$). The bonus shrinks as a
 move is visited, so the search gradually concentrates on the best moves,
 while every move with a non-zero prior is eventually tried.
 
-An edge never visited has no $Q$ yet; it starts at the value of its node
+An edge never visited has no $`Q`$ yet; it starts at the value of its node
 (*first-play urgency*), so it is neither preferred nor ignored.
 
 ### 2. Expand and evaluate
 
 When the selection reaches an edge never taken, the move is played in a copy
-of the environment, giving its reward $r$ and a new state $s'$. The network
-is run **once** on $s'$:
+of the environment, giving its reward $`r`$ and a new state $`s'`$. The network
+is run **once** on $`s'`$:
 
 * the policy head gives the priors of the new node's edges;
-* the value head gives $V(s')$, an estimate of the return still to come.
+* the value head gives $`V(s')`$, an estimate of the return still to come.
 
 The classical MCTS would instead play random moves to the end of the
 episode (a *roll-out*) to estimate the return. On a 400-cell lawn a random
@@ -66,10 +66,10 @@ The estimate is carried back up the path, discounting it at each step:
 G \leftarrow V(s'), \qquad \text{then for each edge from the leaf to the root:}\quad G \leftarrow r + \gamma\, G,
 ```
 
-and each edge on the path adds 1 to its count $N$ and updates its $Q$.
+and each edge on the path adds 1 to its count $`N`$ and updates its $`Q`$.
 
 After the simulations, the mower plays the **most visited** move at the
-root. The visit count is a more robust choice than the highest $Q$: a move
+root. The visit count is a more robust choice than the highest $`Q`$: a move
 visited often has been checked many times.
 
 ## What changes when there is no opponent
@@ -77,12 +77,12 @@ visited often has been checked many times.
 1. **No alternation.** In a two-player game, the selection maximises the
    value at the player's nodes and minimises it at the opponent's (or flips
    the sign at every level). Here every node maximises the same return.
-2. **Unbounded returns.** In a game the outcome is −1, 0 or +1, so $Q$ and
+2. **Unbounded returns.** In a game the outcome is −1, 0 or +1, so $`Q`$ and
    the exploration bonus have comparable scales. Here returns grow with the
-   lawn, and $c = 1.25$ would mean nothing next to a $Q$ of 30. As in MuZero
-   (Schrittwieser et al., 2020), $Q$ is rescaled to $[0, 1]$ with the
+   lawn, and $`c = 1.25`$ would mean nothing next to a $`Q`$ of 30. As in MuZero
+   (Schrittwieser et al., 2020), $`Q`$ is rescaled to $`[0, 1]`$ with the
    smallest and largest values seen in the tree:
-   $\hat Q = (Q - Q_{\min}) / (Q_{\max} - Q_{\min})$. The bounds are reset
+   $`\hat Q = (Q - Q_{\min}) / (Q_{\max} - Q_{\min})`$. The bounds are reset
    before every move, since the returns shrink as the lawn gets mowed.
 3. **A deterministic world.** The same moves always lead to the same state,
    so the tree is an exact model of the future. Two consequences:

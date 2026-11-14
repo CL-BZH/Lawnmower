@@ -19,7 +19,7 @@ direction). The code tries all 4.
 ## 2. A spanning tree
 
 A **spanning tree** of the mega-cell graph connects all mega-cells with
-exactly $M - 1$ edges ($M$ mega-cells), without cycles. Any spanning tree
+exactly $`M - 1`$ edges ($`M`$ mega-cells), without cycles. Any spanning tree
 works for coverage. Its shape decides how straight the path is.
 
 The code builds it with Kruskal's algorithm, which adds the edges in order
@@ -61,13 +61,13 @@ left side). For each of these two sides:
    the inside of this boundary, half a mega-cell from the tree, so it too is
    a single closed curve.
 
-So the loop passes through all $4M$ sub-cells, each exactly once, with
+So the loop passes through all $`4M`$ sub-cells, each exactly once, with
 orthogonal moves only. It is a **Hamiltonian cycle** of the covered part of
 the lawn. The code checks this (`circumnavigate` raises an error if a
 sub-cell is met twice), and so do the tests.
 
 Starting from any cell of the loop and following it, the mower mows the
-$4M$ cells in $4M - 1$ moves: the lower bound of [page 1](01-problem.md),
+$`4M`$ cells in $`4M - 1`$ moves: the lower bound of [page 1](01-problem.md),
 on that part of the lawn. If the mega-cells cover the whole lawn (an open
 rectangle with even sides, for instance), STC is **provably optimal**.
 

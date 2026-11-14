@@ -14,7 +14,7 @@ mower does.
 It starts well, but once the mower is surrounded by mowed grass the rule
 becomes a plain random walk, and the last isolated patches are found only by
 chance. The expected time for a random walk to visit every vertex (the
-*cover time*) grows much faster than $N$. On `maze2` (N = 404) the walk
+*cover time*) grows much faster than $`N`$. On `maze2` (N = 404) the walk
 needs 12 721 steps, an overhead of 31.6. It is seeded, and it stops after
 50 N steps even if the lawn is not finished.
 
@@ -65,7 +65,7 @@ fewest turns, without giving up a single step.
 The number of turns of a path depends on the *direction of the previous
 move*, which a cell alone does not record. The search therefore runs on an
 enlarged graph whose states are **(cell, heading)** pairs. A move from state
-$(c, h)$ in direction $h'$ costs
+$`(c, h)`$ in direction $`h'`$ costs
 
 ```math
 \text{cost} = 10\,000 \times 1 \;+\; [\,h' \neq h\,],

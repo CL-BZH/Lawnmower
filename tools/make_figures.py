@@ -286,8 +286,12 @@ def fig_observation() -> None:
         ax.set_title(names[k], fontsize=9)
         if k == 4:
             r, c = env.pos
-            ax.text(c, r, f"{obs[4][r, c]:.1f}", color="#e53935", ha="center", va="center",
-                    fontsize=8, fontweight="bold")
+            # a label outside the grid: the channel itself holds only a grey level
+            ax.add_patch(Rectangle((c - 0.5, r - 0.5), 1, 1, fill=False, ec="#e53935", lw=1.5))
+            ax.annotate(f"value {obs[4][r, c]:.1f}\n(the grey cell)", xy=(c, r + 0.5),
+                        xytext=(w / 2, h + 2.2), ha="center", va="center", fontsize=8,
+                        color="#e53935", annotation_clip=False,
+                        arrowprops=dict(arrowstyle="-|>", color="#e53935", lw=1))
     save(fig, "observation.svg")
 
 

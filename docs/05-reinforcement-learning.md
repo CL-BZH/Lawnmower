@@ -40,10 +40,13 @@ information:
 
 ![the observation planes](figures/observation.svg)
 
-Channel 3 marks the cell straight ahead, which encodes the heading in the
-picture itself. Channel 4 is only present when the consecutive-turn penalty
-is used (see below). The observation contains the whole state, so the agent
-sees everything that matters.
+Each channel is a grid of numbers between 0 and 1, drawn here as grey
+levels (0 white, 1 black). Channel 3 marks the cell straight ahead, which
+encodes the heading in the picture itself. Channel 4 is only present when
+the consecutive-turn penalty is used (see below). It is zero everywhere
+except at the mower's cell, which holds a grey level: 0.3 in the figure,
+three steps after the last turn. The observation contains the whole state,
+so the agent sees everything that matters.
 
 ## Rewards: telling the agent what a good path is
 

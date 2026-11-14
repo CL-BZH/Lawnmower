@@ -1,0 +1,162 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 560" width="900" height="560" font-family="Helvetica, Arial, sans-serif" font-size="13">
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#333"/>
+    </marker>
+    <style>
+      .box{fill:#f4f6f8;stroke:#455a64;stroke-width:1.3}
+      .blk{fill:#fff3e0;stroke:#ef6c00;stroke-width:1.3}
+      .pol{fill:#e3f2fd;stroke:#1565c0;stroke-width:1.4}
+      .val{fill:#f3e5f5;stroke:#7b1fa2;stroke-width:1.4}
+      .t{fill:#222}
+      .s{fill:#555;font-size:11px}
+      .h{font-weight:bold}
+      .ln{stroke:#333;stroke-width:1.4;fill:none}
+    </style>
+  </defs>
+  <rect width="900" height="560" fill="#ffffff"/>
+
+  <!-- ================= trunk ================= -->
+  <text x="20" y="24" class="t h" font-size="15">Trunk: convolutions only — the spatial size H × W is kept everywhere</text>
+
+  <!-- input stack -->
+  <g>
+    <rect x="52" y="66" width="62" height="62" fill="#c8e6c9" stroke="#2e7d32"/>
+    <rect x="46" y="72" width="62" height="62" fill="#a5d6a7" stroke="#2e7d32"/>
+    <rect x="40" y="78" width="62" height="62" fill="#81c784" stroke="#2e7d32"/>
+    <rect x="34" y="84" width="62" height="62" fill="#66bb6a" stroke="#2e7d32"/>
+    <rect x="28" y="90" width="62" height="62" fill="#43a047" stroke="#2e7d32"/>
+    <text x="70" y="172" text-anchor="middle" class="t h">observation</text>
+    <text x="70" y="188" text-anchor="middle" class="s">(4 or 5, H, W)</text>
+    <text x="70" y="203" text-anchor="middle" class="s">obstacle, mowed,</text>
+    <text x="70" y="216" text-anchor="middle" class="s">mower, cell ahead,</text>
+    <text x="70" y="229" text-anchor="middle" class="s">(turn memory)</text>
+  </g>
+  <line x1="122" y1="110" x2="146" y2="110" class="ln" marker-end="url(#ar)"/>
+
+  <!-- stem -->
+  <rect x="148" y="80" width="80" height="60" rx="6" class="box"/>
+  <text x="188" y="102" text-anchor="middle" class="t h">stem</text>
+  <text x="188" y="118" text-anchor="middle" class="s">3×3 conv</text>
+  <text x="188" y="132" text-anchor="middle" class="s">→ 32 ch.</text>
+  <line x1="228" y1="110" x2="246" y2="110" class="ln" marker-end="url(#ar)"/>
+
+  <!-- 5 residual blocks -->
+  <g>
+    <rect x="248" y="80" width="80" height="60" rx="6" class="blk"/>
+    <text x="288" y="102" text-anchor="middle" class="t h">block 1</text>
+    <text x="288" y="118" text-anchor="middle" class="s">dilation 1</text>
+    <text x="288" y="132" text-anchor="middle" class="s">sees 7×7</text>
+    <line x1="328" y1="110" x2="340" y2="110" class="ln" marker-end="url(#ar)"/>
+
+    <rect x="342" y="80" width="80" height="60" rx="6" class="blk"/>
+    <text x="382" y="102" text-anchor="middle" class="t h">block 2</text>
+    <text x="382" y="118" text-anchor="middle" class="s">dilation 2</text>
+    <text x="382" y="132" text-anchor="middle" class="s">sees 13×13</text>
+    <line x1="422" y1="110" x2="434" y2="110" class="ln" marker-end="url(#ar)"/>
+
+    <rect x="436" y="80" width="80" height="60" rx="6" class="blk"/>
+    <text x="476" y="102" text-anchor="middle" class="t h">block 3</text>
+    <text x="476" y="118" text-anchor="middle" class="s">dilation 4</text>
+    <text x="476" y="132" text-anchor="middle" class="s">sees 23×23</text>
+    <line x1="516" y1="110" x2="528" y2="110" class="ln" marker-end="url(#ar)"/>
+
+    <rect x="530" y="80" width="80" height="60" rx="6" class="blk"/>
+    <text x="570" y="102" text-anchor="middle" class="t h">block 4</text>
+    <text x="570" y="118" text-anchor="middle" class="s">dilation 8</text>
+    <text x="570" y="132" text-anchor="middle" class="s">sees 41×41</text>
+    <line x1="610" y1="110" x2="622" y2="110" class="ln" marker-end="url(#ar)"/>
+
+    <rect x="624" y="80" width="80" height="60" rx="6" class="blk"/>
+    <text x="664" y="102" text-anchor="middle" class="t h">block 5</text>
+    <text x="664" y="118" text-anchor="middle" class="s">dilation 16</text>
+    <text x="664" y="132" text-anchor="middle" class="s">sees 75×75</text>
+    <line x1="704" y1="110" x2="740" y2="110" class="ln" marker-end="url(#ar)"/>
+  </g>
+
+  <!-- feature stack -->
+  <g>
+    <rect x="782" y="62" width="62" height="62" fill="#fff8e1" stroke="#8d6e63"/>
+    <rect x="778" y="66" width="62" height="62" fill="#ffecb3" stroke="#8d6e63"/>
+    <rect x="774" y="70" width="62" height="62" fill="#ffe082" stroke="#8d6e63"/>
+    <rect x="770" y="74" width="62" height="62" fill="#ffd54f" stroke="#8d6e63"/>
+    <rect x="766" y="78" width="62" height="62" fill="#ffca28" stroke="#8d6e63"/>
+    <rect x="762" y="82" width="62" height="62" fill="#ffc107" stroke="#8d6e63"/>
+    <rect x="758" y="86" width="62" height="62" fill="#ffb300" stroke="#8d6e63"/>
+    <rect x="754" y="90" width="62" height="62" fill="#ffa000" stroke="#8d6e63"/>
+    <!-- a 3x3 patch around the mower -->
+    <rect x="771" y="107" width="27" height="27" fill="none" stroke="#e53935" stroke-width="2"/>
+    <circle cx="784.5" cy="120.5" r="4" fill="#1565c0" stroke="#fff"/>
+    <text x="800" y="172" text-anchor="middle" class="t h">features</text>
+    <text x="800" y="188" text-anchor="middle" class="s">(32, H, W)</text>
+    <text x="800" y="203" text-anchor="middle" class="s">one 32-number vector</text>
+    <text x="800" y="216" text-anchor="middle" class="s">per cell</text>
+  </g>
+
+  <!-- residual block detail -->
+  <text x="20" y="262" class="t h" font-size="15">Inside a residual block (dilation d)</text>
+  <g>
+    <text x="30" y="318" class="t">x</text>
+    <line x1="42" y1="314" x2="66" y2="314" class="ln" marker-end="url(#ar)"/>
+    <rect x="68" y="296" width="52" height="36" rx="5" class="box"/>
+    <text x="94" y="319" text-anchor="middle" class="t">ReLU</text>
+    <line x1="120" y1="314" x2="134" y2="314" class="ln" marker-end="url(#ar)"/>
+    <rect x="136" y="290" width="92" height="48" rx="5" class="blk"/>
+    <text x="182" y="310" text-anchor="middle" class="t">3×3 conv</text>
+    <text x="182" y="327" text-anchor="middle" class="s">dilation d</text>
+    <line x1="228" y1="314" x2="242" y2="314" class="ln" marker-end="url(#ar)"/>
+    <rect x="244" y="296" width="52" height="36" rx="5" class="box"/>
+    <text x="270" y="319" text-anchor="middle" class="t">ReLU</text>
+    <line x1="296" y1="314" x2="310" y2="314" class="ln" marker-end="url(#ar)"/>
+    <rect x="312" y="290" width="74" height="48" rx="5" class="box"/>
+    <text x="349" y="310" text-anchor="middle" class="t">3×3 conv</text>
+    <text x="349" y="327" text-anchor="middle" class="s">dilation 1</text>
+    <line x1="386" y1="314" x2="400" y2="314" class="ln" marker-end="url(#ar)"/>
+    <circle cx="410" cy="314" r="10" fill="#fff" stroke="#333" stroke-width="1.4"/>
+    <text x="410" y="319" text-anchor="middle" class="t h">+</text>
+    <path d="M52,314 L52,360 L410,360 L410,326" class="ln" marker-end="url(#ar)"/>
+    <text x="230" y="376" text-anchor="middle" class="s">skip connection: the block only learns a correction to x</text>
+    <line x1="420" y1="314" x2="440" y2="314" class="ln" marker-end="url(#ar)"/>
+    <text x="446" y="318" class="t">out</text>
+    <!-- dilation sketch -->
+    <g transform="translate(150,392)">
+      <text x="-130" y="14" class="s">a 3×3 kernel with dilation 2:</text>
+      <g fill="#fff" stroke="#bbb">
+        <rect x="40" y="0" width="12" height="12"/><rect x="52" y="0" width="12" height="12"/><rect x="64" y="0" width="12" height="12"/><rect x="76" y="0" width="12" height="12"/><rect x="88" y="0" width="12" height="12"/>
+        <rect x="40" y="12" width="12" height="12"/><rect x="52" y="12" width="12" height="12"/><rect x="64" y="12" width="12" height="12"/><rect x="76" y="12" width="12" height="12"/><rect x="88" y="12" width="12" height="12"/>
+        <rect x="40" y="24" width="12" height="12"/><rect x="52" y="24" width="12" height="12"/><rect x="64" y="24" width="12" height="12"/><rect x="76" y="24" width="12" height="12"/><rect x="88" y="24" width="12" height="12"/>
+        <rect x="40" y="36" width="12" height="12"/><rect x="52" y="36" width="12" height="12"/><rect x="64" y="36" width="12" height="12"/><rect x="76" y="36" width="12" height="12"/><rect x="88" y="36" width="12" height="12"/>
+        <rect x="40" y="48" width="12" height="12"/><rect x="52" y="48" width="12" height="12"/><rect x="64" y="48" width="12" height="12"/><rect x="76" y="48" width="12" height="12"/><rect x="88" y="48" width="12" height="12"/>
+      </g>
+      <g fill="#ef6c00">
+        <rect x="40" y="0" width="12" height="12"/><rect x="64" y="0" width="12" height="12"/><rect x="88" y="0" width="12" height="12"/>
+        <rect x="40" y="24" width="12" height="12"/><rect x="64" y="24" width="12" height="12"/><rect x="88" y="24" width="12" height="12"/>
+        <rect x="40" y="48" width="12" height="12"/><rect x="64" y="48" width="12" height="12"/><rect x="88" y="48" width="12" height="12"/>
+      </g>
+      <text x="112" y="26" class="s">still 9 weights per channel pair,</text>
+      <text x="112" y="41" class="s">spread over a 5×5 area</text>
+    </g>
+  </g>
+
+  <!-- ================= heads ================= -->
+  <text x="490" y="262" class="t h" font-size="15">Heads: fixed-size inputs</text>
+  <path d="M770,226 L770,282" class="ln" marker-end="url(#ar)"/>
+  <path d="M850,226 L850,400" class="ln" marker-end="url(#ar)"/>
+
+  <rect x="490" y="284" width="335" height="96" rx="7" class="pol"/>
+  <text x="502" y="304" class="t h" fill="#1565c0">policy  π(a | s)</text>
+  <text x="502" y="322" class="s">features of the mower's 3×3 neighbourhood</text>
+  <text x="502" y="337" class="s">9 × 32 = 288 numbers → Linear 128 → ReLU → Linear 8</text>
+  <text x="502" y="352" class="s">illegal moves masked out (logit −10⁹) → softmax</text>
+  <text x="502" y="369" class="t">8 move probabilities (E, NE, N, … SE)</text>
+
+  <rect x="490" y="402" width="390" height="96" rx="7" class="val"/>
+  <text x="502" y="422" class="t h" fill="#7b1fa2">value  V(s)</text>
+  <text x="502" y="440" class="s">mower's features (32) ⊕ mean over lawn cells (32)</text>
+  <text x="502" y="455" class="s">⊕ max over lawn cells (32) ⊕ cells left / 100 (1)</text>
+  <text x="502" y="470" class="s">97 numbers → Linear 128 → ReLU → Linear 1</text>
+  <text x="502" y="487" class="t">expected (discounted) return still to come</text>
+
+  <text x="20" y="532" class="t">Nothing in the network has a size that depends on H or W: the same weights run on a 9×9 lawn and on a 31×31 one.</text>
+  <text x="20" y="550" class="s">Diagram of lawnmower/learn/net.py (CoverageNet, channels = 32, dilations 1, 2, 4, 8, 16, hidden = 128).</text>
+</svg>

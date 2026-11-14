@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 420" width="900" height="420" font-family="Helvetica, Arial, sans-serif" font-size="13">
+  <defs>
+    <marker id="ab" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1565c0"/>
+    </marker>
+    <marker id="ap" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#7b1fa2"/>
+    </marker>
+    <style>
+      .e{stroke:#9e9e9e;stroke-width:1.5}
+      .n{fill:#fff;stroke:#455a64;stroke-width:1.5}
+      .sel{stroke:#1565c0;stroke-width:4}
+      .t{fill:#222}
+      .s{fill:#555;font-size:11px}
+      .h{font-weight:bold;font-size:15px}
+    </style>
+  </defs>
+  <rect width="900" height="420" fill="#fff"/>
+
+  <!-- ============ panel 1: select ============ -->
+  <g>
+    <text x="20" y="26" class="t h">1. Select</text>
+    <line x1="150" y1="70" x2="75" y2="140" class="e sel"/>
+    <line x1="150" y1="70" x2="150" y2="140" class="e"/>
+    <line x1="150" y1="70" x2="225" y2="140" class="e"/>
+    <line x1="75" y1="140" x2="45" y2="210" class="e"/>
+    <line x1="75" y1="140" x2="105" y2="210" class="e sel"/>
+    <line x1="150" y1="140" x2="150" y2="210" class="e"/>
+    <circle cx="150" cy="70" r="15" class="n"/><text x="150" y="75" text-anchor="middle" class="t">s</text>
+    <circle cx="75" cy="140" r="13" class="n"/>
+    <circle cx="150" cy="140" r="13" class="n"/>
+    <circle cx="225" cy="140" r="13" class="n"/>
+    <circle cx="45" cy="210" r="11" class="n"/>
+    <circle cx="105" cy="210" r="11" class="n" stroke="#1565c0" stroke-width="2.5"/>
+    <circle cx="150" cy="210" r="11" class="n"/>
+    <text x="74" y="104" class="s">N=12</text>
+    <text x="156" y="108" class="s">N=5</text>
+    <text x="196" y="102" class="s">N=2</text>
+    <text x="20" y="262" class="t">from the root, follow the edge</text>
+    <text x="20" y="280" class="t">with the highest score</text>
+    <text x="20" y="306" class="t" font-style="italic">Q̂(s,a) + c·P(s,a)·√N(s) / (1 + N(s,a))</text>
+    <text x="20" y="330" class="s">Q̂: return seen after (s,a), rescaled to [0,1]</text>
+    <text x="20" y="345" class="s">P: prior from the policy head</text>
+    <text x="20" y="360" class="s">second term: bonus for promising, rarely</text>
+    <text x="20" y="373" class="s">tried moves; it shrinks with visits</text>
+  </g>
+
+  <!-- ============ panel 2: expand & evaluate ============ -->
+  <g transform="translate(300,0)">
+    <text x="20" y="26" class="t h">2. Expand and evaluate</text>
+    <line x1="150" y1="70" x2="75" y2="140" class="e"/>
+    <line x1="150" y1="70" x2="150" y2="140" class="e"/>
+    <line x1="150" y1="70" x2="225" y2="140" class="e"/>
+    <line x1="75" y1="140" x2="45" y2="210" class="e"/>
+    <line x1="75" y1="140" x2="105" y2="210" class="e"/>
+    <line x1="150" y1="140" x2="150" y2="210" class="e"/>
+    <line x1="105" y1="210" x2="105" y2="268" class="e sel" stroke-dasharray="6 4"/>
+    <circle cx="150" cy="70" r="15" class="n"/>
+    <circle cx="75" cy="140" r="13" class="n"/>
+    <circle cx="150" cy="140" r="13" class="n"/>
+    <circle cx="225" cy="140" r="13" class="n"/>
+    <circle cx="45" cy="210" r="11" class="n"/>
+    <circle cx="105" cy="210" r="11" class="n"/>
+    <circle cx="150" cy="210" r="11" class="n"/>
+    <circle cx="105" cy="280" r="12" fill="#e3f2fd" stroke="#1565c0" stroke-width="2.5" stroke-dasharray="4 3"/>
+    <text x="122" y="250" class="s">play the move in the env:</text>
+    <text x="122" y="263" class="s">reward r, new state s′</text>
+    <rect x="160" y="290" width="120" height="50" rx="6" fill="#f3e5f5" stroke="#7b1fa2"/>
+    <text x="220" y="310" text-anchor="middle" class="t">network(s′)</text>
+    <text x="220" y="327" text-anchor="middle" class="s">one forward pass</text>
+    <line x1="118" y1="285" x2="158" y2="305" stroke="#7b1fa2" stroke-width="1.4" marker-end="url(#ap)"/>
+    <text x="20" y="360" class="s">→ priors P(s′, ·) for the new node's edges</text>
+    <text x="20" y="375" class="s">→ value V(s′): estimate of the return still to come</text>
+    <text x="20" y="390" class="s">no random roll-out to the end of the episode</text>
+  </g>
+
+  <!-- ============ panel 3: back up ============ -->
+  <g transform="translate(600,0)">
+    <text x="20" y="26" class="t h">3. Back up</text>
+    <line x1="150" y1="70" x2="75" y2="140" class="e"/>
+    <line x1="150" y1="70" x2="150" y2="140" class="e"/>
+    <line x1="150" y1="70" x2="225" y2="140" class="e"/>
+    <line x1="75" y1="140" x2="45" y2="210" class="e"/>
+    <line x1="75" y1="140" x2="105" y2="210" class="e"/>
+    <line x1="150" y1="140" x2="150" y2="210" class="e"/>
+    <line x1="105" y1="210" x2="105" y2="268" class="e"/>
+    <circle cx="150" cy="70" r="15" class="n"/>
+    <circle cx="75" cy="140" r="13" class="n"/>
+    <circle cx="150" cy="140" r="13" class="n"/>
+    <circle cx="225" cy="140" r="13" class="n"/>
+    <circle cx="45" cy="210" r="11" class="n"/>
+    <circle cx="105" cy="210" r="11" class="n"/>
+    <circle cx="150" cy="210" r="11" class="n"/>
+    <circle cx="105" cy="280" r="12" fill="#e3f2fd" stroke="#1565c0" stroke-width="2"/>
+    <path d="M90,266 C70,250 70,232 90,220" fill="none" stroke="#1565c0" stroke-width="2.2" marker-end="url(#ab)"/>
+    <path d="M90,200 C68,184 62,166 70,154" fill="none" stroke="#1565c0" stroke-width="2.2" marker-end="url(#ab)"/>
+    <path d="M86,128 C100,100 118,84 136,76" fill="none" stroke="#1565c0" stroke-width="2.2" marker-end="url(#ab)"/>
+    <text x="0" y="248" class="s" fill="#1565c0">G = V(s′)</text>
+    <text x="0" y="188" class="s" fill="#1565c0">G ← r + γG</text>
+    <text x="10" y="108" class="s" fill="#1565c0">G ← r + γG</text>
+    <text x="20" y="320" class="t">along the path, for each edge:</text>
+    <text x="20" y="340" class="s">N(s,a) += 1</text>
+    <text x="20" y="355" class="s">Q(s,a) = mean of the G seen (or their max)</text>
+    <text x="20" y="370" class="s">update the min / max used to rescale Q</text>
+  </g>
+
+  <line x1="296" y1="40" x2="296" y2="395" stroke="#e0e0e0"/>
+  <line x1="596" y1="40" x2="596" y2="395" stroke="#e0e0e0"/>
+  <text x="450" y="412" text-anchor="middle" class="t">Repeat (64 simulations by default), then play the most visited move at the root and keep its subtree for the next move.</text>
+</svg>

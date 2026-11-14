@@ -4,6 +4,11 @@ Plan a path that mows every reachable cell of a lawn with as little wasted
 travel as possible, compare planners on the same footing, and train
 reinforcement-learning agents on the same model.
 
+**How each method works**, with figures and the maths behind it, is
+explained step by step in [`docs/`](docs/README.md): the problem and its
+lower bound, greedy, boustrophedon, STC, reinforcement learning, the
+network, and MCTS.
+
 ![STC on maze8](docs/stc_maze8.gif)
 
 ## Quick start
@@ -443,7 +448,8 @@ lawnmower/
   __main__.py      command line interface
 maps/              example lawns
 models/            trained agent checkpoints
-tools/             Kaggle notebook for GPU training
+docs/              how the methods work (illustrated, one page per method)
+tools/             Kaggle notebook for GPU training, figures of the docs
 tests/             pytest suite (all planners on all maps, legality, RL env)
 ```
 

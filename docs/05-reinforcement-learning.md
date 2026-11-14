@@ -178,7 +178,7 @@ avoid moving the policy far from the one that collected the data, PPO
 (Schulman et al., 2017) maximises the *clipped* objective
 
 ```math
-L(\theta) = \mathbb E\Big[\min\big(\rho_t \hat A_t,\; \operatorname{clip}(\rho_t, 1-\varepsilon, 1+\varepsilon)\, \hat A_t\big)\Big],
+L(\theta) = \mathbb E\Big[\min\big(\rho_t \hat A_t,\; \mathrm{clip}(\rho_t, 1-\varepsilon, 1+\varepsilon)\, \hat A_t\big)\Big],
 \qquad \rho_t = \frac{\pi_\theta(a_t \mid s_t)}{\pi_{\text{old}}(a_t \mid s_t)},\; \varepsilon = 0.2 .
 ```
 

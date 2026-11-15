@@ -330,8 +330,8 @@ That is a lesson in itself: the reward says *what* is better, not *how* to
 find it. The agent mostly snakes because it does not see far enough ahead
 to know where long passes would fit. A larger penalty makes it accept
 detours to avoid turns, but it does not teach it to plan the passes. That
-would take a longer look-ahead (MCTS with a value head trained on large
-lawns), or training on large lawns.
+would take a longer look-ahead; training on large lawns alone did not
+provide it (see [Training on large lawns](#training-on-large-lawns-modelsagent_largept)).
 
 `agent_small.pt` stays the default model. To try the others:
 `python -m lawnmower run -p agent --model models/agent_turns_strong.pt maps/maze0.txt`.
@@ -389,8 +389,8 @@ large ones (table below): it finds the shortest path of all on maze6 but
 fails to finish maze1 and test_map. Max backups did worse than the mean, for
 example 284 vs 277 steps on maze0 with an earlier model. A search is only as
 good as its value estimates, and the small agent's value head has never seen
-a lawn larger than 14×14. MCTS should pay off with a network trained on large
-lawns.
+a lawn larger than 14×14. With the network trained on large lawns (below),
+MCTS finishes every map, but it still does not beat sampling.
 
 ### Results (`models/agent_small.pt`)
 
@@ -430,9 +430,57 @@ agent or its MCTS gives the fewest steps on maze0, maze6 and test_map. It comes 
 on maze8, with half the turns, but is worse than all three planners on maze1.
 The same training without symmetries and the curriculum also finishes these
 maps, but in more steps: 566 vs 465 on maze6, 434 vs 425 on maze8. So the
-augmentation helps generalisation. Training on large lawns is the next step:
-`tools/train_kaggle.ipynb` does it on a GPU, and can then fine-tune on a single
-map.
+augmentation helps generalisation.
+
+### Training on large lawns (`models/agent_large.pt`)
+
+Could the agent do better on large maps if it had trained on them? This model
+was trained with `tools/train_kaggle.ipynb`: behaviour cloning of `greedy` on
+2 000 lawns, then 13M PPO steps (11.5 h, the 12-hour limit of a Kaggle run)
+with a wider network (48 channels). The random gardens grew from 8 to 32
+cells over the first 6M steps, and 30% of the episodes were on maze0, maze1,
+maze6, maze8 and test_map. **maze2 was kept out** as a test map.
+
+| map (N) | stc | `agent_small` (best of 16) | `agent_large` (best of 16) | `agent_large` + mcts (64) |
+|---|---|---|---|---|
+| maze0 (262) | 273/125 | 269/64 | **267**/58 | 270/59 |
+| maze2 (404), not trained on | **427**/182 | 435/90 | 431/77 | 441/78 |
+| maze1 (426) | 496/205 | 513/119 | **452**/94 | 457/88 |
+| maze6 (438) | 494/204 | **465**/105 | 492/110 | 497/107 |
+| maze8 (406) | **420**/180 | 425/97 | 454/105 | 458/105 |
+| test_map (347) | 478/283 | **406**/187 | 447/209 | 456/197 |
+| **total** | 2588/1179 | **2513**/662 | 2543/653 | 2579/634 |
+
+| unseen random gardens, overhead | greedy | boustrophedon | stc | `agent_small` | `agent_large` |
+|---|---:|---:|---:|---:|---:|
+| 60 gardens of 8–14 | 1.115 | 1.108 | 1.089 | **1.046** | 1.063 |
+| 30 gardens of 16–32 | 1.088 | 1.059 | **1.029** | 1.047 | 1.051 |
+
+**The large model is not better overall.**
+
+* It wins clearly on maze1 (452 vs 513 steps, now ahead of every planner)
+  and slightly on maze2, the map it never saw. But it loses on maze6, maze8
+  and test_map, although they were part of its training. Over the six maps,
+  it takes 30 more steps than `agent_small`.
+* On unseen large gardens the two agents are level (1.051 vs 1.047), and
+  STC is best: these gardens are fairly open, which suits its 2×2 blocks.
+  On small gardens the large model gave up part of the small one's edge.
+* The one clear gain is the search: with this network, **MCTS finishes all
+  six large maps**, where the small network's search failed on maze1 and
+  test_map. Its value head now knows large lawns. But MCTS still does not
+  beat the best of 16 sampled episodes.
+
+So the size of the training lawns was not the bottleneck: `agent_small`
+already copes with lawns twice the size it was trained on. The limits are
+probably elsewhere. The policy decides from what the features say about
+the 3×3 cells around the mower. With γ = 0.995, rewards more than about
+200 steps away hardly count, on episodes of 400 to 1 000 steps. And on its
+own training lawns, a single sampled episode still had an overhead of about
+1.12 at the end, with no progress over the last 2M steps. More steps of the
+same training would not have helped much.
+
+`agent_small.pt` stays the default; use `--model models/agent_large.pt` for
+MCTS on large maps. The notebook can also fine-tune a model on a single map.
 
 ## Layout
 

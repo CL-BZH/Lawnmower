@@ -121,8 +121,13 @@ any cell. So the network *can* see everything. That does not mean it has
 
 The sampled agent still finishes every large map, and on several of them it
 beats the planners, but its uncertain value estimates are what makes the
-search of the [next page](07-mcts.md) hit-or-miss on large maps. The fix is
-not a different architecture but **training on large lawns** (the Kaggle
-notebook in `tools/` does it on a GPU).
+search of the [next page](07-mcts.md) hit-or-miss on large maps.
+
+Training on large lawns fixes the value estimates, but not the paths. A
+network trained on gardens up to 32×32 (`models/agent_large.pt`, see the main
+README) lets the search finish every large map. Yet its sampled paths are no
+shorter overall than those of the small agent, which already copes with lawns
+twice the size it was trained on. Seeing a large lawn and planning a good
+path over it are two different things.
 
 [← Reinforcement learning](05-reinforcement-learning.md) · [Next: single-player MCTS →](07-mcts.md)

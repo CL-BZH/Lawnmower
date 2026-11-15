@@ -107,7 +107,15 @@ A search is only as good as its value estimates. With the small agent,
 trained on lawns up to 14×14 (see [page 6](06-network.md)), MCTS mostly
 matches the best of 16 sampled episodes on the lawns it knows, finds the
 shortest path of all on `maze6`, but fails to finish `maze1` and `test_map`,
-where its value estimates are extrapolations. MCTS should pay off with a
-network trained on large lawns.
+where its value estimates are extrapolations.
+
+With a network trained on lawns up to 32×32 (`models/agent_large.pt`), the
+search finishes all six large maps. But it does not beat the best of 16
+sampled episodes of the same network: on these maps it takes 3 to 10 more
+steps. With 64 simulations per move, the search only looks a few moves
+ahead, while the costly mistakes, such as leaving a strip that must be
+fetched later, show up hundreds of moves later. There the search depends
+on the value head, and the value head is not precise enough to tell such
+paths apart.
 
 [← The network](06-network.md) · [Back to the index](README.md)
